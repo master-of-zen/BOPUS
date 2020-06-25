@@ -1,2 +1,2 @@
-# AOPUS
+# BOPUS
 Bitrate Optimization for OPUS
