@@ -1,21 +1,16 @@
 #!/usr/bin/env python3
 
-# Import the AudioSegment class for processing audio and the
-# split_on_silence function for separating out silent chunks.
-from pydub import AudioSegment
-from pydub.silence import split_on_silence
-import matplotlib.pyplot as plt
-import numpy as np
+from subprocess import Popen
 
-sound = AudioSegment.from_file('aud.mkv', codec='libopus')
+class BOPUS:
+
+    def __init__(self):
+        self.probes = []
 
 
-print(sound)
-chunks = split_on_silence(sound, min_silence_len=200, silence_thresh=-16)
+    def make_probe(self):
+        pass
 
-print(chunks)
-# samples = np.array(sound.get_array_of_samples())), 
-
-# x = np.arange(0, len(samples))
-# plt.show()
+    def check_score(self):
+        pass
 
