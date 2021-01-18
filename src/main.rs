@@ -1,8 +1,9 @@
 
-use clap::{App, Arg, ArgMatches};
+use clap::{App, Arg};
 use std::fs;
 
-fn get_matches() -> ArgMatches<'static>{
+
+fn main() {
     let _matches = App::new("My Super Program")
                             .version("0.1")
                             .author("Zen <true.grenight@gmail.com>>")
@@ -20,19 +21,12 @@ fn get_matches() -> ArgMatches<'static>{
                                 .help("Sets value of quality to target")
                                 .takes_value(true))
                             .get_matches();
-    println!("{:?}", _matches);
-    println!("Using input file: {}", _matches.value_of("INPUT").unwrap());
-    println!("Using quality target: {}", _matches.value_of("TARGET").unwrap());
-    return _matches;
-}
 
-fn make_temp() -> std::io::Result<()>{
-    fs::create_dir_all("temp")?;
-    Ok(())
-}
+    fs::create_dir_all("temp").ok().expect("Can't create a temp folder");
+    let input_file: &str = _matches.value_of("INPUT").unwrap();
+    let target_quality = _matches.value_of("TARGET").unwrap_or("4.3");
 
-fn main() {
-    let _mt: ArgMatches = get_matches();
-    make_temp().unwrap();
+    println!("Using input file {}", input_file);
+    println!("Using target quality {}", target_quality);
 }
 
