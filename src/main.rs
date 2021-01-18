@@ -1,7 +1,9 @@
 
+extern crate execute;
 use clap::{App, Arg};
 use std::fs;
-
+use std::process::Command;
+use execute::Execute;
 
 fn main() {
     let _matches = App::new("My Super Program")
@@ -28,5 +30,23 @@ fn main() {
 
     println!("Using input file {}", input_file);
     println!("Using target quality {}", target_quality);
+
+
+    // Making wav
+    let mut cmd = Command::new("ffmpeg");
+    cmd.args(&["-i", input_file, "-ar", "48000", "temp/ref.wav"]);
+    println!("{:?}", cmd);
+    if let Some(exit_code) = cmd.execute().unwrap() {
+        if exit_code == 0{println!("Converted to wav");}
+        else
+        {
+            eprintln!("Failed");
+            println!("{:?}", cmd.output().unwrap())
+        }
+    }
+
+    else {eprintln!("Interupted")}
+
+
 }
 
