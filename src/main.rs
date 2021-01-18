@@ -1,7 +1,8 @@
 
-use clap::{Arg, App};
+use clap::{App, Arg, ArgMatches};
+use std::fs;
 
-fn get_matches(){
+fn get_matches() -> ArgMatches<'static>{
     let _matches = App::new("My Super Program")
                             .version("0.1")
                             .author("Zen <true.grenight@gmail.com>>")
@@ -21,10 +22,17 @@ fn get_matches(){
                             .get_matches();
     println!("{:?}", _matches);
     println!("Using input file: {}", _matches.value_of("INPUT").unwrap());
-                            return;
+    println!("Using quality target: {}", _matches.value_of("TARGET").unwrap());
+    return _matches;
+}
+
+fn make_temp() -> std::io::Result<()>{
+    fs::create_dir_all("temp")?;
+    Ok(())
 }
 
 fn main() {
-    get_matches();
+    let _mt: ArgMatches = get_matches();
+    make_temp().unwrap();
 }
 
