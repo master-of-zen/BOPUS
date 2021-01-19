@@ -78,6 +78,7 @@ fn main() {
             break
         }
         score  = make_probe(bitrate);
+        score  = trasnform_score(score: f32);
         bitrates.push((bitrate, score));
 
         // println!("{:?}", bitrates);
@@ -94,9 +95,17 @@ fn main() {
     let mut cmd = Command::new("ffmpeg");
     cmd.args(&[ "-y", "-i", input_file, "-c:a","libopus", "-b:a", &format!("{}K", &bitrate.to_string()), &format!("{}.opus", input_file) ]);
     cmd.execute().unwrap();
-
-
 }
+
+
+/// Transform score for easier score comprehension and usage
+/// Scaled 4.0 - 4.75 range to 0.0 - 5.0
+fn trasnform_score(score:f32) -> f32{
+    let scale_value = 5.0 / (4.75 - 4.0);
+    let new_score:f32 = (score - 4.0) * scale_value;
+    new_score
+}
+
 
 fn make_probe(bitrate:u32) -> f32{
 
