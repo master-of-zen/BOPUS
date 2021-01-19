@@ -44,7 +44,7 @@ fn main() {
     if temp_path.exists(){
         fs::remove_dir_all(temp_path).ok().expect("Can't remove temp folder");
         fs::create_dir_all("temp").ok().expect("Can't create a temp folder");
-    }else {
+    }else{
         fs::create_dir_all("temp").ok().expect("Can't create a temp folder");
     }
 
@@ -63,6 +63,7 @@ fn main() {
     // get metric score
     let mut bitrate: u32 = 96;
     let mut count: u32 = 0;
+    let mut score: f32;
 
     let mut bitrates: Vec<(u32, f32)> = vec![];
     // bitrate | score
@@ -72,15 +73,29 @@ fn main() {
     loop {
         count += 1;
 
-        if count > 6{
+        if count > 4{
             println!(":: Get more than {}, ending comparison", count );
             break
         }
-        let score:f32 = make_probe(bitrate);
+        score  = make_probe(bitrate);
+        bitrates.push((bitrate, score));
 
+        // println!("{:?}", bitrates);
         println!(":: Try: {} Bitrate: {}, Score: {}", count, bitrate, score);
-        break
+
+        bitrate = ((target_quality / score) * (bitrate as f32)) as u32;
+        println!(":: New bitrate: {}", bitrate)
+
+
     }
+    println!("{:?}", bitrates);
+    println!("Encoding end result with {} bitrate", bitrate );
+
+    let mut cmd = Command::new("ffmpeg");
+    cmd.args(&[ "-y", "-i", input_file, "-c:a","libopus", "-b:a", &format!("{}K", &bitrate.to_string()), &format!("{}.opus", input_file) ]);
+    cmd.execute().unwrap();
+
+
 }
 
 fn make_probe(bitrate:u32) -> f32{
@@ -139,21 +154,3 @@ fn make_wav(input: &str){
         }
         else {eprintln!("Interupted")}
 }
-
-fn encode_audio(bitrate:u32){
-    // final encode of the audio
-    let mut cmd = Command::new("ffmpeg");
-    cmd.args(&[ "-y", "-i", "temp/ref.wav", "-c:a","libopus", "-b:a", &format!("{}K", &bitrate.to_string()), &format!("temp/{}", bitrate) ]);
-
-    if let Some(exit_code) = cmd.execute().unwrap() {
-        if exit_code == 0{println!("Converted to wav");}
-        else
-        {
-            eprintln!("Failed");
-            println!("{:?}", cmd.output().unwrap())
-        }
-    }
-    else {eprintln!("Interupted")}
-}
-
-
