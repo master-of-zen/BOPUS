@@ -1,4 +1,4 @@
-# BOPUS
+# 🅱️OPUS
 Bitrate Optimization for OPUS.
 
 Bopus search for bitrate of OPUS that will result in desired quality. Quality of audio is asserted by [Visqol](https://github.com/google/visqol).
