@@ -35,8 +35,7 @@ The following instructions for BOPUS can be found below.
 2. cd bopus
 
 3. cargo build
-
-4. sudo cp /home/username/bopus/target/release/bopus /usr/local/bin/ (this will install the binary so you can execute it directly from the command line)
+You can now execute from its original folder.
 ```
 
 
