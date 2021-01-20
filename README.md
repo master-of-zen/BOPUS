@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://github.com/master-of-zen/BOPUS/blob/master/BOPUS.png?raw=true">
+</p>
+
 # 🅱️OPUS
 Bitrate Optimization for OPUS.
 
