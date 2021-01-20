@@ -35,7 +35,9 @@ The following instructions for BOPUS can be found below.
 2. cd bopus
 
 3. cargo build
-You can now execute from its original folder.
+
+4. Copy the bopus binary found in target/release, and copy it alongside the visqol binary that you should have.
+In the end, you should have a directory containing the bopus and the visqol binaries, your audio file, and the models folder with the models inside. You can start encoding now.
 ```
 
 
