@@ -81,7 +81,6 @@ fn main() {
         score  = trasnform_score(score: f32);
         bitrates.push((bitrate, score));
 
-        // println!("{:?}", bitrates);
         println!(":: Try: {} Bitrate: {}, Score: {}", count, bitrate, score);
 
         bitrate = ((target_quality / score) * (bitrate as f32)) as u32;
@@ -89,7 +88,6 @@ fn main() {
 
 
     }
-    println!("{:?}", bitrates);
     println!("Encoding end result with {} bitrate", bitrate );
 
     let mut cmd = Command::new("ffmpeg");
