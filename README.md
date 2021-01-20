@@ -11,6 +11,33 @@ Bopus search for bitrate of OPUS that will result in desired quality. Quality of
 1. Clone and install [Visqol](https://github.com/google/visqol).
 2. Put models in same directory where is your audio file.
 3. Clone and build bopus, execute it in same folder with input file and `models` from visqol folder.
+The following instructions for BOPUS can be found below.
+
+## How to compile BOPUS itself(Linux only for now)
+1st part (Installing Rust dependencies. You will need to install curl to do this one)
+
+```
+1. curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh (this will install the latest stable RustC release, alongside some other important stuff you need. You might be prompted for your password. If the install is successful, the following line will appear: Rust is installed now. Great!)
+
+1.1. rustup update (this is done to update to the latest stable RustC release if you need to).
+
+2. rustc -V (checking which rustc version you have. Provided you followed the last 2 instructions, it'll say "rustc XXXXX version".
+
+3. rustup toolchain install nightly (this will install the nightly rustc build, which is required to actually compile this program).
+
+4. rustup default nightly && rustc -V (the 1st command will set the nightly as default for the compiler, and rustc -V will check what version you have. If it's nightly, you're good to go.
+```
+
+2nd part(Compiling BOPUS)
+```
+1. git clone https://github.com/master-of-zen/BOPUS bopus
+
+2. cd bopus
+
+3. cargo build
+
+4. sudo cp /home/username/bopus/target/release/bopus /usr/local/bin/ (this will install the binary so you can execute it directly from the command line)
+```
 
 
 ## Usage
