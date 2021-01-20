@@ -11,7 +11,8 @@ Bopus search for bitrate of OPUS that will result in desired quality. Quality of
 1. Clone and install [Visqol](https://github.com/google/visqol).
 2. Put models in same directory where is your audio file.
 3. Clone and build bopus, execute it in same folder with input file and `models` from visqol folder.
-The following instructions for BOPUS can be found below.
+
+The following instructions for compiling BOPUS can be found below.
 
 ## How to compile BOPUS itself(Linux only for now)
 1st part (Installing Rust dependencies. You will need to install curl to do this one)
