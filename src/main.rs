@@ -99,6 +99,9 @@ fn main() {
 /// Transform score for easier score comprehension and usage
 /// Scaled 4.0 - 4.75 range to 0.0 - 5.0
 fn trasnform_score(score:f32) -> f32{
+    if score < 4.1{
+        return 1.0f32;
+    }
     let scale_value = 5.0 / (4.75 - 4.0);
     let new_score:f32 = (score - 4.0) * scale_value;
     new_score
