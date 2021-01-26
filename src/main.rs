@@ -15,6 +15,8 @@ use std::path::PathBuf;
 use std::cmp;
 use rayon::ThreadPoolBuilder;
 use rayon::prelude::*;
+use std::fs::File;
+use std::io::prelude::*;
 
 
 
@@ -83,16 +85,7 @@ fn main() {
     let f1 = it.par_iter();
     f1.for_each(move |x| {optimize( x, target_quality)});
 
-    //let it = wav_segments.iter().par_iter().for_each(move || {optimize(seg.unwrap(), target_quality)});
-
-
-    //for_each(move || {optimize(seg.unwrap(), target_quality)})
-
-    //for seg in wav_segments{
-    //    pool.install(move || {optimize(seg.unwrap(), target_quality)});
-    //}
-
-
+    concatenate(input_file);
 
 }
 
@@ -133,8 +126,34 @@ fn create_all_dir(){
 }
 
 
-fn concatenate(){
+fn concatenate(output: &str){
+    println!(":: Concatenating");
+    let conc_file = Path::new("temp/concat.txt");
+    let conc_folder = Path::new("temp/conc");
+    let fl = fs::read_dir(conc_folder).unwrap();
 
+    let mut txt: String = String::new().to_owned();
+    let mut t = Vec::new();
+
+    for seg in fl{
+        t.push(seg.unwrap());
+    }
+    t.sort_by_key(|k| k.path());
+
+    for p in t{
+        let st = format!("file 'conc/{}' \n", p.file_name().to_str().unwrap());
+        txt.push_str(&st);
+    }
+    let pt = Path::new(output).with_extension("opus");
+    let out: &str = pt.to_str().unwrap();
+
+    let mut file = File::create(conc_file).unwrap();
+    file.write_all(txt.as_bytes()).unwrap();
+
+    let mut cmd = Command::new("ffmpeg");
+    cmd.args(&["-y", "-safe", "0", "-f", "concat", "-i", conc_file.to_str().unwrap(), "-c", "copy", out]);
+    //println!("{:?}", cmd);
+    cmd.output().expect("Failed to concatenate");
 }
 
 fn optimize(file: &DirEntry, target_quality: f32){
@@ -142,7 +161,7 @@ fn optimize(file: &DirEntry, target_quality: f32){
     // get metric score
     let mut bitrate: u32 = 96;
     let mut count: u32 = 0;
-    let mut score: f32;
+    let mut score: f32 = 0.0;
     let path = file.path();
     let stem = path.file_stem().unwrap().to_str().unwrap();
     let file_str: &str = path.to_str().unwrap();
@@ -153,8 +172,8 @@ fn optimize(file: &DirEntry, target_quality: f32){
     loop {
         count += 1;
 
-        if count > 4{
-            println!(":: Get more than {}, ending comparison", count );
+        if count > 8{
+            println!(":: # {} Exceed {} probes, Found B: {}, Score {:.2}", stem, count, bitrate, score);
             break
         }
         let pf = file.path();
@@ -162,14 +181,21 @@ fn optimize(file: &DirEntry, target_quality: f32){
         score  = trasnform_score(score: f32);
         bitrates.push((bitrate, score));
 
-        println!(":: Segment {} Try: {} Bitrate: {}, Score: {}", stem, count, bitrate, score);
+        let dif: f32 = (score - target_quality).abs();
+
+        if dif < 0.3{
+            println!(":: # {} Found B: {}, Score {:.2}",stem,  bitrate, score);
+            break
+        }
+
+        // println!(":: # {} Probe: {} B: {}, Score: {:.2}", stem, count, bitrate, score);
 
         bitrate = ((target_quality / score) * (bitrate as f32)) as u32;
-        println!(":: New bitrate: {}", bitrate)
+        // println!(":: New: {}", bitrate)
 
 
     }
-    println!("Encoding end result with {} bitrate", bitrate );
+    println!(":: # {} Found B: {}, Score {:.2}", stem, bitrate, score);
 
     let mut cmd = Command::new("ffmpeg");
     cmd.args(&[ "-y", "-i", file_str, "-c:a","libopus", "-b:a", &format!("{}K", &bitrate.to_string()), &format!("temp/conc/{}.opus", stem) ]);
@@ -182,7 +208,7 @@ fn segment(input: &str) -> Vec<std::result::Result<DirEntry, std::io::Error>>{
 
     let segments = Path::new("temp/segments");
     let mut cmd = Command::new("ffmpeg");
-    cmd.args(&["-y", "-i", input, "-ar", "48000", "-f", "segment", "-segment_time", "10", "temp/segments/%05d.wav"]);
+    cmd.args(&["-y", "-i", input, "-ar", "48000", "-f", "segment", "-segment_time", "12", "temp/segments/%05d.wav"]);
     cmd.output().unwrap();
 
     let mut vc = vec!();
@@ -201,7 +227,8 @@ fn trasnform_score(score:f32) -> f32{
         return 1.0f32;
     }
     let scale_value = 5.0 / (4.75 - 4.0);
-    let new_score:f32 = (score - 4.0) * scale_value;
+    let new_score:f32 = (score - 4.1) * scale_value;
+    //println!("Score in {}, Score out{}", score, new_score);
     new_score
 }
 
