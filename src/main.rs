@@ -12,8 +12,7 @@ use execute::Execute;
 use regex::Regex;
 use std::fs::DirEntry;
 use std::cmp;
-use threadpool::ThreadPool;
-
+use rayon::ThreadPoolBuilder;
 
 
 
@@ -71,12 +70,11 @@ fn main() {
     println!(":: Segments {}", wav_segments.len());
     println!(":: Running {} jobs", jobs);
 
-    let pool = ThreadPool::new(jobs as usize);
+    let pool = rayon::ThreadPoolBuilder::new().num_threads(jobs as usize).build().unwrap();
 
-    for job in wav_segments{
-        pool.execute(move || { optimize(job.unwrap(), target_quality: f32)})
-    };
-
+    for seg in wav_segments{
+        pool.spawn(move || {optimize(seg.unwrap(), target_quality)});
+    }
 
 }
 
@@ -171,7 +169,6 @@ fn segment(input: &str) -> Vec<std::result::Result<DirEntry, std::io::Error>>{
     let files = fs::read_dir(&segments).unwrap();
 
     vc.extend(files);
-    println!("{:?}", vc[0]);
     return vc;
 
 }
