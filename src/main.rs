@@ -11,8 +11,10 @@ use std::process::{Command, Stdio};
 use execute::Execute;
 use regex::Regex;
 use std::fs::DirEntry;
+use std::path::PathBuf;
 use std::cmp;
 use rayon::ThreadPoolBuilder;
+
 
 
 
@@ -74,7 +76,9 @@ fn main() {
 
     for seg in wav_segments{
         pool.spawn(move || {optimize(seg.unwrap(), target_quality)});
+
     }
+
 
 }
 
@@ -126,10 +130,10 @@ fn optimize(file: DirEntry, target_quality: f32){
     let mut count: u32 = 0;
     let mut score: f32;
     let path = file.path();
+    let stem = path.file_name().unwrap().to_str().unwrap();
     let file_str: &str = path.to_str().unwrap();
     let mut bitrates: Vec<(u32, f32)> = vec![];
     // bitrate | score
-
 
     // Search loop
     loop {
@@ -139,11 +143,12 @@ fn optimize(file: DirEntry, target_quality: f32){
             println!(":: Get more than {}, ending comparison", count );
             break
         }
-        score  = make_probe(file_str, bitrate);
+        let pf = file.path();
+        score  = make_probe(pf, bitrate);
         score  = trasnform_score(score: f32);
         bitrates.push((bitrate, score));
 
-        println!(":: Segment {} Try: {} Bitrate: {}, Score: {}", file_str, count, bitrate, score);
+        println!(":: Segment {} Try: {} Bitrate: {}, Score: {}", stem, count, bitrate, score);
 
         bitrate = ((target_quality / score) * (bitrate as f32)) as u32;
         println!(":: New bitrate: {}", bitrate)
@@ -155,6 +160,7 @@ fn optimize(file: DirEntry, target_quality: f32){
     let mut cmd = Command::new("ffmpeg");
     cmd.args(&[ "-y", "-i", file_str, "-c:a","libopus", "-b:a", &format!("{}K", &bitrate.to_string()), &format!("temp/conc{}.opus", file_str) ]);
     cmd.execute().unwrap();
+
 }
 
 
@@ -186,21 +192,24 @@ fn trasnform_score(score:f32) -> f32{
 }
 
 
-fn make_probe(file_str: &str ,bitrate:u32) -> f32{
+fn make_probe(fl: PathBuf ,bitrate:u32) -> f32{
 
+    let file_str: &str = fl.to_str().unwrap();
     // Audio to opus
+    let probe_name = fl.file_stem().unwrap().to_str().unwrap();
+
     let mut cmd = Command::new("ffmpeg");
-    cmd.args(&["-y", "-i", file_str, "-c:a","libopus", "-b:a", &format!("{}K", &bitrate.to_string()), &format!("temp/probes/{}{}.opus", file_str, bitrate) ]);
+    cmd.args(&["-y", "-i", file_str, "-c:a","libopus", "-b:a", &format!("{}K", &bitrate.to_string()), &format!("temp/probes/{}{}.opus", probe_name, bitrate) ]);
     cmd.execute().unwrap();
 
     // Audio to wav
     let mut cmd = Command::new("ffmpeg");
-    cmd.args(&["-y", "-i", &format!("temp/probes/{}{}.opus", file_str, bitrate), "-ar", "48000", &format!("temp/probes/{}{}.wav", file_str, bitrate)]);
+    cmd.args(&["-y", "-i", &format!("temp/probes/{}{}.opus", probe_name, bitrate), "-ar", "48000", &format!("temp/probes/{}{}.wav", probe_name, bitrate)]);
     cmd.output().expect("can't  convert opus");
 
     // calculating score
     let mut cmd = Command::new("visqol");
-    cmd.args(&["--reference_file", file_str, "--degraded_file", &format!("temp/probes/{}{}.wav", file_str, bitrate)]);
+    cmd.args(&["--reference_file", file_str, "--degraded_file", &format!("temp/probes/{}{}.wav", probe_name, bitrate)]);
 
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
