@@ -53,6 +53,9 @@ fn main() {
 
     // creating temp dir/removing old
     let temp_path = Path::new("temp");
+    let segments = Path::new("temp/segments");
+    let probes = Path::new("temp/probes");
+    let conc = Path::new("temp/conc");
 
     if temp_path.exists(){
         fs::remove_dir_all(temp_path).ok().expect("Can't remove temp folder");
@@ -60,6 +63,28 @@ fn main() {
     }else{
         fs::create_dir_all("temp").ok().expect("Can't create a temp folder");
     }
+
+    if segments.exists(){
+        fs::remove_dir_all(segments).ok().expect("Can't remove segments folder");
+        fs::create_dir_all("temp/segments").ok().expect("Can't create segments folder");
+    }else{
+        fs::create_dir_all("temp/segments").ok().expect("Can't create segments folder");
+    }
+
+    if probes.exists(){
+        fs::remove_dir_all(probes).ok().expect("Can't remove probes folder");
+        fs::create_dir_all(probes).ok().expect("Can't create probes folder");
+    }else{
+        fs::create_dir_all(probes).ok().expect("Can't create probes folder");
+    }
+
+    if conc.exists(){
+        fs::remove_dir_all(conc).ok().expect("Can't remove conc folder");
+        fs::create_dir_all(conc).ok().expect("Can't create a conc folder");
+    }else{
+        fs::create_dir_all(conc).ok().expect("Can't create a conc folder");
+    }
+
 
     let input_file: &str = _matches.value_of("INPUT").unwrap();
     let target_quality: f32 = _matches.value_of("TARGET").unwrap_or("4").parse().unwrap();
@@ -110,11 +135,11 @@ fn optimize(file: DirEntry, target_quality: f32){
             println!(":: Get more than {}, ending comparison", count );
             break
         }
-        score  = make_probe(bitrate);
+        score  = make_probe(file_str, bitrate);
         score  = trasnform_score(score: f32);
         bitrates.push((bitrate, score));
 
-        println!(":: Try: {} Bitrate: {}, Score: {}", count, bitrate, score);
+        println!(":: Segment {} Try: {} Bitrate: {}, Score: {}", file_str, count, bitrate, score);
 
         bitrate = ((target_quality / score) * (bitrate as f32)) as u32;
         println!(":: New bitrate: {}", bitrate)
@@ -132,14 +157,6 @@ fn optimize(file: DirEntry, target_quality: f32){
 fn segment(input: &str) -> Vec<std::result::Result<DirEntry, std::io::Error>>{
 
     let segments = Path::new("temp/segments");
-
-    if segments.exists(){
-        fs::remove_dir_all(segments).ok().expect("Can't remove temp folder");
-        fs::create_dir_all("temp/segments").ok().expect("Can't create a temp folder");
-    }else{
-        fs::create_dir_all("temp/segments").ok().expect("Can't create a temp folder");
-    }
-
     let mut cmd = Command::new("ffmpeg");
     cmd.args(&["-y", "-i", input, "-ar", "48000", "-f", "segment", "-segment_time", "5", "temp/segments/%05d.wav"]);
     cmd.execute().unwrap();
@@ -166,21 +183,21 @@ fn trasnform_score(score:f32) -> f32{
 }
 
 
-fn make_probe(bitrate:u32) -> f32{
+fn make_probe(file_str: &str ,bitrate:u32) -> f32{
 
     // Audio to opus
     let mut cmd = Command::new("ffmpeg");
-    cmd.args(&["-y", "-i", "temp/ref.wav", "-c:a","libopus", "-b:a", &format!("{}K", &bitrate.to_string()), &format!("temp/{}.opus", bitrate) ]);
+    cmd.args(&["-y", "-i", file_str, "-c:a","libopus", "-b:a", &format!("{}K", &bitrate.to_string()), &format!("temp/probes/{}{}.opus", file_str, bitrate) ]);
     cmd.execute().unwrap();
 
     // Audio to wav
     let mut cmd = Command::new("ffmpeg");
-    cmd.args(&["-y", "-i", &format!("temp/{}.opus", bitrate), "-ar", "48000", &format!("temp/{}.wav", bitrate)]);
+    cmd.args(&["-y", "-i", &format!("temp/probes/{}{}.opus", file_str, bitrate), "-ar", "48000", &format!("temp/probes/{}{}.wav", file_str, bitrate)]);
     cmd.output().expect("can't  convert opus");
 
     // calculating score
     let mut cmd = Command::new("visqol");
-    cmd.args(&["--reference_file", "temp/ref.wav", "--degraded_file", &format!["temp/{}.wav", bitrate]]);
+    cmd.args(&["--reference_file", file_str, "--degraded_file", &format!("temp/probes/{}{}.wav", file_str, bitrate)]);
 
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
