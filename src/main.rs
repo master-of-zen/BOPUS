@@ -15,11 +15,9 @@ use std::cmp;
 use threadpool::ThreadPool;
 
 
+
+
 fn main() {
-
-
-
-
     // check is executables exist
     if is_program_in_path("ffmpeg"){}
     else {println!("No.");}
@@ -51,6 +49,38 @@ fn main() {
             .takes_value(true))
         .get_matches();
 
+
+    // Create all required temp dirs
+    create_all_dir();
+
+    let input_file: &str = _matches.value_of("INPUT").unwrap();
+    let target_quality: f32 = _matches.value_of("TARGET").unwrap_or("4").parse().unwrap();
+
+    let cpu_cores: i32 = num_cpus::get() as i32;
+    let mut jobs: i32 = _matches.value_of("JOBS").unwrap_or(&format!("{}", cpu_cores)).parse().unwrap();
+
+    // printing some stuff
+    println!(":: Using input file {}", input_file);
+    println!(":: Using target quality {}", target_quality);
+
+
+    // making wav and segmenting
+    let wav_segments = segment(input_file: &str);
+    jobs = cmp::min(jobs, wav_segments.len() as i32);
+
+    println!(":: Segments {}", wav_segments.len());
+    println!(":: Running {} jobs", jobs);
+
+    let pool = ThreadPool::new(jobs as usize);
+
+    for job in wav_segments{
+        pool.execute(move || { optimize(job.unwrap(), target_quality: f32)})
+    };
+
+
+}
+
+fn create_all_dir(){
     // creating temp dir/removing old
     let temp_path = Path::new("temp");
     let segments = Path::new("temp/segments");
@@ -84,36 +114,12 @@ fn main() {
     }else{
         fs::create_dir_all(conc).ok().expect("Can't create a conc folder");
     }
-
-
-    let input_file: &str = _matches.value_of("INPUT").unwrap();
-    let target_quality: f32 = _matches.value_of("TARGET").unwrap_or("4").parse().unwrap();
-
-    let cpu_cores: i32 = num_cpus::get() as i32;
-    let mut jobs: i32 = _matches.value_of("JOBS").unwrap_or(&format!("{}", cpu_cores)).parse().unwrap();
-
-
-    // printing some stuff
-    println!(":: Using input file {}", input_file);
-    println!(":: Using target quality {}", target_quality);
-
-
-    // making wav and segmenting
-    let wav_segments = segment(input_file: &str);
-    jobs = cmp::min(jobs, wav_segments.len() as i32);
-
-    println!(":: Segments {}", wav_segments.len());
-    println!(":: Running {} jobs", jobs);
-
-    let pool = ThreadPool::new(jobs as usize);
-
-    for job in wav_segments{
-        pool.execute(move || { optimize(job.unwrap(), target_quality: f32)})
-    };
-
-
 }
 
+
+fn concatenate(){
+
+}
 
 fn optimize(file: DirEntry, target_quality: f32){
 
@@ -149,7 +155,7 @@ fn optimize(file: DirEntry, target_quality: f32){
     println!("Encoding end result with {} bitrate", bitrate );
 
     let mut cmd = Command::new("ffmpeg");
-    cmd.args(&[ "-y", "-i", file_str, "-c:a","libopus", "-b:a", &format!("{}K", &bitrate.to_string()), &format!("{}.opus", file_str) ]);
+    cmd.args(&[ "-y", "-i", file_str, "-c:a","libopus", "-b:a", &format!("{}K", &bitrate.to_string()), &format!("temp/conc{}.opus", file_str) ]);
     cmd.execute().unwrap();
 }
 
