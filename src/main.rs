@@ -1,6 +1,8 @@
 #![feature(type_ascription)]
 extern crate execute;
 extern crate regex;
+extern crate num_cpus;
+extern crate threadpool;
 use std::env;
 use clap::{App, Arg};
 use std::fs;
@@ -8,9 +10,15 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use execute::Execute;
 use regex::Regex;
+use std::fs::DirEntry;
+use std::cmp;
+use threadpool::ThreadPool;
 
 
 fn main() {
+
+
+
 
     // check is executables exist
     if is_program_in_path("ffmpeg"){}
@@ -36,6 +44,11 @@ fn main() {
             .long("target")
             .help("Sets value of quality to target")
             .takes_value(true))
+        .arg(Arg::with_name("JOBS")
+            .short("j")
+            .long("jobs")
+            .help("set amount of jobs to run")
+            .takes_value(true))
         .get_matches();
 
     // creating temp dir/removing old
@@ -49,22 +62,41 @@ fn main() {
     }
 
     let input_file: &str = _matches.value_of("INPUT").unwrap();
-    let target_quality: f32 = _matches.value_of("TARGET").unwrap_or("4.3").parse().unwrap();
+    let target_quality: f32 = _matches.value_of("TARGET").unwrap_or("4").parse().unwrap();
+
+    let cpu_cores: i32 = num_cpus::get() as i32;
+    let mut jobs: i32 = _matches.value_of("JOBS").unwrap_or(&format!("{}", cpu_cores)).parse().unwrap();
+
 
     // printing some stuff
     println!(":: Using input file {}", input_file);
     println!(":: Using target quality {}", target_quality);
 
 
-    // making wav
-    make_wav(input_file: &str);
+    // making wav and segmenting
+    let wav_segments = segment(input_file: &str);
+    jobs = cmp::min(jobs, wav_segments.len() as i32);
 
+    println!(":: Segments {}", wav_segments.len());
+    println!(":: Running {} jobs", jobs);
+
+    let pool = ThreadPool::new(jobs as usize);
+
+    for job in wav_segments{
+        pool.execute(move || { optimize(job.unwrap(), target_quality: f32)})
+    };
+
+}
+
+
+fn optimize(file: DirEntry, target_quality: f32){
 
     // get metric score
     let mut bitrate: u32 = 96;
     let mut count: u32 = 0;
     let mut score: f32;
-
+    let path = file.path();
+    let file_str: &str = path.to_str().unwrap();
     let mut bitrates: Vec<(u32, f32)> = vec![];
     // bitrate | score
 
@@ -91,8 +123,33 @@ fn main() {
     println!("Encoding end result with {} bitrate", bitrate );
 
     let mut cmd = Command::new("ffmpeg");
-    cmd.args(&[ "-y", "-i", input_file, "-c:a","libopus", "-b:a", &format!("{}K", &bitrate.to_string()), &format!("{}.opus", input_file) ]);
+    cmd.args(&[ "-y", "-i", file_str, "-c:a","libopus", "-b:a", &format!("{}K", &bitrate.to_string()), &format!("{}.opus", file_str) ]);
     cmd.execute().unwrap();
+}
+
+
+fn segment(input: &str) -> Vec<std::result::Result<DirEntry, std::io::Error>>{
+
+    let segments = Path::new("temp/segments");
+
+    if segments.exists(){
+        fs::remove_dir_all(segments).ok().expect("Can't remove temp folder");
+        fs::create_dir_all("temp/segments").ok().expect("Can't create a temp folder");
+    }else{
+        fs::create_dir_all("temp/segments").ok().expect("Can't create a temp folder");
+    }
+
+    let mut cmd = Command::new("ffmpeg");
+    cmd.args(&["-y", "-i", input, "-ar", "48000", "-f", "segment", "-segment_time", "5", "temp/segments/%05d.wav"]);
+    cmd.execute().unwrap();
+
+    let mut vc = vec!();
+    let files = fs::read_dir(&segments).unwrap();
+
+    vc.extend(files);
+    println!("{:?}", vc[0]);
+    return vc;
+
 }
 
 
