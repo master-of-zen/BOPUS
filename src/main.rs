@@ -14,6 +14,8 @@ use std::fs::DirEntry;
 use std::path::PathBuf;
 use std::cmp;
 use rayon::ThreadPoolBuilder;
+use rayon::prelude::*;
+
 
 
 
@@ -57,7 +59,7 @@ fn main() {
     let input_file: &str = _matches.value_of("INPUT").unwrap();
     let target_quality: f32 = _matches.value_of("TARGET").unwrap_or("4").parse().unwrap();
 
-    let cpu_cores: i32 = num_cpus::get() as i32;
+    let cpu_cores: i32 = (num_cpus::get() / 2) as i32;
     let mut jobs: i32 = _matches.value_of("JOBS").unwrap_or(&format!("{}", cpu_cores)).parse().unwrap();
 
     // printing some stuff
@@ -67,17 +69,29 @@ fn main() {
 
     // making wav and segmenting
     let wav_segments = segment(input_file: &str);
-    jobs = cmp::min(jobs, wav_segments.len() as i32);
+    let mut it = vec!();
+    for seg in wav_segments{
+        it.push(seg.unwrap())
+    }
+    jobs = cmp::min(jobs, it.len() as i32);
 
-    println!(":: Segments {}", wav_segments.len());
+    println!(":: Segments {}", it.len());
     println!(":: Running {} jobs", jobs);
 
-    let pool = rayon::ThreadPoolBuilder::new().num_threads(jobs as usize).build().unwrap();
 
-    for seg in wav_segments{
-        pool.install(move || {optimize(seg.unwrap(), target_quality)});
+    rayon::ThreadPoolBuilder::new().num_threads(jobs as usize).build_global().unwrap();
+    let f1 = it.par_iter();
+    f1.for_each(move |x| {optimize( x, target_quality)});
 
-    }
+    //let it = wav_segments.iter().par_iter().for_each(move || {optimize(seg.unwrap(), target_quality)});
+
+
+    //for_each(move || {optimize(seg.unwrap(), target_quality)})
+
+    //for seg in wav_segments{
+    //    pool.install(move || {optimize(seg.unwrap(), target_quality)});
+    //}
+
 
 
 }
@@ -123,14 +137,14 @@ fn concatenate(){
 
 }
 
-fn optimize(file: DirEntry, target_quality: f32){
+fn optimize(file: &DirEntry, target_quality: f32){
 
     // get metric score
     let mut bitrate: u32 = 96;
     let mut count: u32 = 0;
     let mut score: f32;
     let path = file.path();
-    let stem = path.file_name().unwrap().to_str().unwrap();
+    let stem = path.file_stem().unwrap().to_str().unwrap();
     let file_str: &str = path.to_str().unwrap();
     let mut bitrates: Vec<(u32, f32)> = vec![];
     // bitrate | score
@@ -158,8 +172,8 @@ fn optimize(file: DirEntry, target_quality: f32){
     println!("Encoding end result with {} bitrate", bitrate );
 
     let mut cmd = Command::new("ffmpeg");
-    cmd.args(&[ "-y", "-i", file_str, "-c:a","libopus", "-b:a", &format!("{}K", &bitrate.to_string()), &format!("temp/conc{}.opus", file_str) ]);
-    cmd.execute().unwrap();
+    cmd.args(&[ "-y", "-i", file_str, "-c:a","libopus", "-b:a", &format!("{}K", &bitrate.to_string()), &format!("temp/conc/{}.opus", stem) ]);
+    cmd.output().unwrap();
 
 }
 
@@ -168,8 +182,8 @@ fn segment(input: &str) -> Vec<std::result::Result<DirEntry, std::io::Error>>{
 
     let segments = Path::new("temp/segments");
     let mut cmd = Command::new("ffmpeg");
-    cmd.args(&["-y", "-i", input, "-ar", "48000", "-f", "segment", "-segment_time", "5", "temp/segments/%05d.wav"]);
-    cmd.execute().unwrap();
+    cmd.args(&["-y", "-i", input, "-ar", "48000", "-f", "segment", "-segment_time", "10", "temp/segments/%05d.wav"]);
+    cmd.output().unwrap();
 
     let mut vc = vec!();
     let files = fs::read_dir(&segments).unwrap();
@@ -200,7 +214,7 @@ fn make_probe(fl: PathBuf ,bitrate:u32) -> f32{
 
     let mut cmd = Command::new("ffmpeg");
     cmd.args(&["-y", "-i", file_str, "-c:a","libopus", "-b:a", &format!("{}K", &bitrate.to_string()), &format!("temp/probes/{}{}.opus", probe_name, bitrate) ]);
-    cmd.execute().unwrap();
+    cmd.output().unwrap();
 
     // Audio to wav
     let mut cmd = Command::new("ffmpeg");
@@ -214,7 +228,7 @@ fn make_probe(fl: PathBuf ,bitrate:u32) -> f32{
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
 
-    let output = cmd.execute_output().unwrap();
+    let output = cmd.output().unwrap();
     let re = Regex::new(r"([0-9]*\.[0-9]*)": &str).unwrap();
     let score_str: &str = &String::from_utf8(output.stdout).unwrap();
 
@@ -235,19 +249,4 @@ fn is_program_in_path(program: &str) -> bool {
         }
     }
     false
-}
-
-fn make_wav(input: &str){
-        // Making wav
-        let mut cmd = Command::new("ffmpeg");
-        cmd.args(&["-y", "-i", input, "-ar", "48000", "temp/ref.wav"]);
-        if let Some(exit_code) = cmd.execute().unwrap() {
-            if exit_code == 0{}
-            else
-            {
-                eprintln!("Failed");
-                println!("{:?}", cmd.output().unwrap())
-            }
-        }
-        else {eprintln!("Interupted")}
 }
