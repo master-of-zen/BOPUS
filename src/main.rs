@@ -86,6 +86,7 @@ fn main() {
         pool.execute(move || { optimize(job.unwrap(), target_quality: f32)})
     };
 
+
 }
 
 
