@@ -75,7 +75,7 @@ fn main() {
     let pool = rayon::ThreadPoolBuilder::new().num_threads(jobs as usize).build().unwrap();
 
     for seg in wav_segments{
-        pool.spawn(move || {optimize(seg.unwrap(), target_quality)});
+        pool.install(move || {optimize(seg.unwrap(), target_quality)});
 
     }
 
