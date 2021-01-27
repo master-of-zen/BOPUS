@@ -41,7 +41,7 @@ struct Args {
     model: PathBuf,
 
     /// Keep temporary folder
-    #[structopt(short, long)]
+    #[structopt(long)]
     keep: bool,
 }
 
