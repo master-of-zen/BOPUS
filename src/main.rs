@@ -1,7 +1,7 @@
 use std::cmp;
 use std::fs::{self, DirEntry, File};
 use std::io::prelude::*;
-use std::os::unix::prelude::OsStrExt;
+// use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -43,8 +43,6 @@ fn main() -> anyhow::Result<()> {
     // Create all required temp dirs
     create_all_dirs()?;
 
-    let mut jobs = args.jobs.unwrap_or_else(|| num_cpus::get() / 2);
-
     // printing some stuff
     println!(":: Using input file {:?}", args.input);
     println!(":: Using target quality {}", args.target_quality);
@@ -57,7 +55,7 @@ fn main() -> anyhow::Result<()> {
         it.push(seg?)
     }
 
-    jobs = cmp::min(jobs, it.len());
+    let jobs = cmp::min(args.jobs.unwrap_or_else(|| num_cpus::get() / 2), it.len());
 
     println!(":: Segments {}", it.len());
     println!(":: Running {} jobs", jobs);
@@ -114,8 +112,7 @@ fn concatenate(output: &Path) -> anyhow::Result<()> {
     }
     let pt = Path::new(output).with_extension("opus");
 
-    // check if filename is valid UTF-8
-    let out: &str = std::str::from_utf8(pt.as_os_str().as_bytes())?;
+    let out = pt.to_string_lossy();
 
     let mut file = File::create(conc_file)?;
     file.write_all(txt.as_bytes())?;
@@ -132,7 +129,7 @@ fn concatenate(output: &Path) -> anyhow::Result<()> {
         conc_file.to_str().unwrap(),
         "-c",
         "copy",
-        out,
+        &out,
     ]);
 
     cmd.output()?;
