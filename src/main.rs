@@ -2,7 +2,6 @@ use rayon::prelude::*;
 use regex::Regex;
 
 use std::cmp;
-use std::env;
 use std::fs;
 use std::fs::{DirEntry, File};
 use std::io::prelude::*;
@@ -28,7 +27,7 @@ struct Args {
     jobs: Option<usize>,
 }
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let args = Args::from_args();
 
     // check if executables exist after getting CLI args
@@ -41,7 +40,7 @@ fn main() {
     }
 
     // Create all required temp dirs
-    create_all_dir();
+    create_all_dir()?;
 
     let mut jobs = args.jobs.unwrap_or_else(|| num_cpus::get() / 2);
 
@@ -52,9 +51,11 @@ fn main() {
     // making wav and segmenting
     let wav_segments = segment(&args.input);
     let mut it = vec![];
+
     for seg in wav_segments {
-        it.push(seg.unwrap())
+        it.push(seg?)
     }
+
     jobs = cmp::min(jobs, it.len());
 
     println!(":: Segments {}", it.len());
@@ -62,48 +63,34 @@ fn main() {
 
     rayon::ThreadPoolBuilder::new()
         .num_threads(jobs as usize)
-        .build_global()
-        .unwrap();
+        .build_global()?;
 
     it.par_iter().for_each(|x| optimize(x, args.target_quality));
 
     concatenate(&args.input);
+
+    Ok(())
 }
 
-fn create_all_dir() {
+macro_rules! remove_and_create {
+    ($file:expr) => {{
+        let file = Path::new($file);
+        if file.exists() {
+            fs::remove_dir_all(file)?;
+        }
+        fs::create_dir_all(file)?;
+    }};
+}
+
+fn create_all_dir() -> anyhow::Result<()> {
     // creating temp dir/removing old
-    let temp_path = Path::new("temp");
-    let segments = Path::new("temp/segments");
-    let probes = Path::new("temp/probes");
-    let conc = Path::new("temp/conc");
 
-    if temp_path.exists() {
-        fs::remove_dir_all(temp_path).expect("Can't remove temp folder");
-        fs::create_dir_all("temp").expect("Can't create a temp folder");
-    } else {
-        fs::create_dir_all("temp").expect("Can't create a temp folder");
-    }
+    remove_and_create!("temp");
+    remove_and_create!("temp/segments");
+    remove_and_create!("temp/probes");
+    remove_and_create!("temp/conc");
 
-    if segments.exists() {
-        fs::remove_dir_all(segments).expect("Can't remove segments folder");
-        fs::create_dir_all("temp/segments").expect("Can't create segments folder");
-    } else {
-        fs::create_dir_all("temp/segments").expect("Can't create segments folder");
-    }
-
-    if probes.exists() {
-        fs::remove_dir_all(probes).expect("Can't remove probes folder");
-        fs::create_dir_all(probes).expect("Can't create probes folder");
-    } else {
-        fs::create_dir_all(probes).expect("Can't create probes folder");
-    }
-
-    if conc.exists() {
-        fs::remove_dir_all(conc).expect("Can't remove conc folder");
-        fs::create_dir_all(conc).expect("Can't create a conc folder");
-    } else {
-        fs::create_dir_all(conc).expect("Can't create a conc folder");
-    }
+    Ok(())
 }
 
 fn concatenate(output: &Path) {
@@ -196,8 +183,8 @@ fn optimize(file: &DirEntry, target_quality: f32) {
         "-c:a",
         "libopus",
         "-b:a",
-        format!("{}K", bitrate).as_str(),
-        format!("temp/conc/{}.opus", stem).as_str(),
+        &format!("{}K", bitrate),
+        &format!("temp/conc/{}.opus", stem),
     ]);
     cmd.output().unwrap();
 }
@@ -227,13 +214,13 @@ fn segment(input: &Path) -> Vec<Result<DirEntry, std::io::Error>> {
 /// Transform score for easier score comprehension and usage
 /// Scaled 4.0 - 4.75 range to 0.0 - 5.0
 fn transform_score(score: f32) -> f32 {
+    const SCALE_VALUE: f32 = 5.0 / (4.75 - 4.0);
+
     if score < 4.1 {
-        return 1.0f32;
+        1.0f32
+    } else {
+        (score - 4.1) * SCALE_VALUE
     }
-    let scale_value = 5.0 / (4.75 - 4.0);
-    let new_score: f32 = (score - 4.1) * scale_value;
-    //println!("Score in {}, Score out{}", score, new_score);
-    new_score
 }
 
 fn make_probe(fl: PathBuf, bitrate: u32) -> f32 {
@@ -249,7 +236,7 @@ fn make_probe(fl: PathBuf, bitrate: u32) -> f32 {
         "-c:a",
         "libopus",
         "-b:a",
-        &format!("{}K", &bitrate.to_string()),
+        &format!("{}K", bitrate),
         &format!("temp/probes/{}{}.opus", probe_name, bitrate),
     ]);
     cmd.output().unwrap();
@@ -280,23 +267,14 @@ fn make_probe(fl: PathBuf, bitrate: u32) -> f32 {
 
     let output = cmd.output().unwrap();
     let re = Regex::new(r"([0-9]*\.[0-9]*)").unwrap();
-    let score_str: &str = &String::from_utf8(output.stdout).unwrap();
+    let score_str = String::from_utf8(output.stdout).unwrap();
 
     let caps = re.captures(&score_str).unwrap();
-    let str_score: &str = caps.get(1).map_or("", |m| m.as_str());
-    let viqol_score: f32 = str_score.parse::<f32>().unwrap();
-    viqol_score
+    let score: &str = caps.get(1).map_or("", |m| m.as_str());
+
+    score.parse().unwrap()
 }
 
 fn is_program_in_path(program: &str) -> bool {
-    // Check is program in path
-    if let Ok(path) = env::var("PATH") {
-        for p in path.split(':') {
-            let p_str = format!("{}/{}", p, program);
-            if fs::metadata(p_str).is_ok() {
-                return true;
-            }
-        }
-    }
-    false
+    which::which(program).is_ok()
 }
