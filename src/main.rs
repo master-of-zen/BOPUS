@@ -1,14 +1,12 @@
-use rayon::prelude::*;
-use regex::Regex;
-
 use std::cmp;
-use std::env;
-use std::fs;
-use std::fs::{DirEntry, File};
+use std::fs::{self, DirEntry, File};
 use std::io::prelude::*;
+// use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use regex::Regex;
 use structopt::StructOpt;
 
 /// Opus bitrate optimizer
@@ -28,22 +26,22 @@ struct Args {
     jobs: Option<usize>,
 }
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let args = Args::from_args();
 
     // check if executables exist after getting CLI args
     if !is_program_in_path("ffmpeg") {
         println!("FFmpeg is not installed or in PATH, required for encoding audio");
+        return Ok(());
     }
 
     if !is_program_in_path("visqol") {
         println!("visqol is not installed or in PATH, required for perceptual quality metrics");
+        return Ok(());
     }
 
     // Create all required temp dirs
-    create_all_dir();
-
-    let mut jobs = args.jobs.unwrap_or_else(|| num_cpus::get() / 2);
+    create_all_dirs()?;
 
     // printing some stuff
     println!(":: Using input file {:?}", args.input);
@@ -52,71 +50,59 @@ fn main() {
     // making wav and segmenting
     let wav_segments = segment(&args.input);
     let mut it = vec![];
+
     for seg in wav_segments {
-        it.push(seg.unwrap())
+        it.push(seg?)
     }
-    jobs = cmp::min(jobs, it.len());
+
+    let jobs = cmp::min(args.jobs.unwrap_or_else(|| num_cpus::get() / 2), it.len());
 
     println!(":: Segments {}", it.len());
     println!(":: Running {} jobs", jobs);
 
     rayon::ThreadPoolBuilder::new()
         .num_threads(jobs as usize)
-        .build_global()
-        .unwrap();
+        .build_global()?;
 
     it.par_iter().for_each(|x| optimize(x, args.target_quality));
 
-    concatenate(&args.input);
+    concatenate(&args.input)?;
+
+    Ok(())
 }
 
-fn create_all_dir() {
+macro_rules! remove_and_create {
+    ($file:expr) => {{
+        let file = Path::new($file);
+        if file.exists() {
+            fs::remove_dir_all(file)?;
+        }
+        fs::create_dir_all(file)?;
+    }};
+}
+
+fn create_all_dirs() -> anyhow::Result<()> {
     // creating temp dir/removing old
-    let temp_path = Path::new("temp");
-    let segments = Path::new("temp/segments");
-    let probes = Path::new("temp/probes");
-    let conc = Path::new("temp/conc");
 
-    if temp_path.exists() {
-        fs::remove_dir_all(temp_path).expect("Can't remove temp folder");
-        fs::create_dir_all("temp").expect("Can't create a temp folder");
-    } else {
-        fs::create_dir_all("temp").expect("Can't create a temp folder");
-    }
+    remove_and_create!("temp");
+    remove_and_create!("temp/segments");
+    remove_and_create!("temp/probes");
+    remove_and_create!("temp/conc");
 
-    if segments.exists() {
-        fs::remove_dir_all(segments).expect("Can't remove segments folder");
-        fs::create_dir_all("temp/segments").expect("Can't create segments folder");
-    } else {
-        fs::create_dir_all("temp/segments").expect("Can't create segments folder");
-    }
-
-    if probes.exists() {
-        fs::remove_dir_all(probes).expect("Can't remove probes folder");
-        fs::create_dir_all(probes).expect("Can't create probes folder");
-    } else {
-        fs::create_dir_all(probes).expect("Can't create probes folder");
-    }
-
-    if conc.exists() {
-        fs::remove_dir_all(conc).expect("Can't remove conc folder");
-        fs::create_dir_all(conc).expect("Can't create a conc folder");
-    } else {
-        fs::create_dir_all(conc).expect("Can't create a conc folder");
-    }
+    Ok(())
 }
 
-fn concatenate(output: &Path) {
+fn concatenate(output: &Path) -> anyhow::Result<()> {
     println!(":: Concatenating");
     let conc_file = Path::new("temp/concat.txt");
     let conc_folder = Path::new("temp/conc");
-    let fl = fs::read_dir(conc_folder).unwrap();
+    let fl = fs::read_dir(conc_folder)?;
 
     let mut txt = String::new();
     let mut t = Vec::new();
 
     for seg in fl {
-        t.push(seg.unwrap());
+        t.push(seg?);
     }
     t.sort_by_key(|k| k.path());
 
@@ -125,10 +111,11 @@ fn concatenate(output: &Path) {
         txt.push_str(&st);
     }
     let pt = Path::new(output).with_extension("opus");
-    let out: &str = pt.to_str().unwrap();
 
-    let mut file = File::create(conc_file).unwrap();
-    file.write_all(txt.as_bytes()).unwrap();
+    let out = pt.to_string_lossy();
+
+    let mut file = File::create(conc_file)?;
+    file.write_all(txt.as_bytes())?;
 
     let mut cmd = Command::new("ffmpeg");
     cmd.args(&[
@@ -138,13 +125,16 @@ fn concatenate(output: &Path) {
         "-f",
         "concat",
         "-i",
-        conc_file.to_str().expect("Filename is not valid UTF-8"),
+        // cannot fail, conc_file has a valid UTF-8 filename
+        conc_file.to_str().unwrap(),
         "-c",
         "copy",
-        out,
+        &out,
     ]);
 
-    cmd.output().expect("Failed to concatenate");
+    cmd.output()?;
+
+    Ok(())
 }
 
 fn optimize(file: &DirEntry, target_quality: f32) {
@@ -196,7 +186,7 @@ fn optimize(file: &DirEntry, target_quality: f32) {
         "-c:a",
         "libopus",
         "-b:a",
-        &format!("{}K", &bitrate.to_string()),
+        &format!("{}K", bitrate),
         &format!("temp/conc/{}.opus", stem),
     ]);
     cmd.output().unwrap();
@@ -221,23 +211,19 @@ fn segment(input: &Path) -> Vec<Result<DirEntry, std::io::Error>> {
     ]);
     cmd.output().unwrap();
 
-    let mut vc = vec![];
-    let files = fs::read_dir(&segments).unwrap();
-
-    vc.extend(files);
-    vc
+    fs::read_dir(&segments).unwrap().collect()
 }
 
 /// Transform score for easier score comprehension and usage
 /// Scaled 4.0 - 4.75 range to 0.0 - 5.0
 fn transform_score(score: f32) -> f32 {
+    const SCALE_VALUE: f32 = 5.0 / (4.75 - 4.0);
+
     if score < 4.1 {
-        return 1.0f32;
+        1.0f32
+    } else {
+        (score - 4.1) * SCALE_VALUE
     }
-    let scale_value = 5.0 / (4.75 - 4.0);
-    let new_score: f32 = (score - 4.1) * scale_value;
-    //println!("Score in {}, Score out{}", score, new_score);
-    new_score
 }
 
 fn make_probe(fl: PathBuf, bitrate: u32) -> f32 {
@@ -253,7 +239,7 @@ fn make_probe(fl: PathBuf, bitrate: u32) -> f32 {
         "-c:a",
         "libopus",
         "-b:a",
-        &format!("{}K", &bitrate.to_string()),
+        &format!("{}K", bitrate),
         &format!("temp/probes/{}{}.opus", probe_name, bitrate),
     ]);
     cmd.output().unwrap();
@@ -284,23 +270,14 @@ fn make_probe(fl: PathBuf, bitrate: u32) -> f32 {
 
     let output = cmd.output().unwrap();
     let re = Regex::new(r"([0-9]*\.[0-9]*)").unwrap();
-    let score_str: &str = &String::from_utf8(output.stdout).unwrap();
+    let score_str = String::from_utf8(output.stdout).unwrap();
 
     let caps = re.captures(&score_str).unwrap();
-    let str_score: &str = caps.get(1).map_or("", |m| m.as_str());
-    let viqol_score: f32 = str_score.parse::<f32>().unwrap();
-    viqol_score
+    let score: &str = caps.get(1).map_or("", |m| m.as_str());
+
+    score.parse().unwrap()
 }
 
 fn is_program_in_path(program: &str) -> bool {
-    // Check is program in path
-    if let Ok(path) = env::var("PATH") {
-        for p in path.split(':') {
-            let p_str = format!("{}/{}", p, program);
-            if fs::metadata(p_str).is_ok() {
-                return true;
-            }
-        }
-    }
-    false
+    which::which(program).is_ok()
 }
