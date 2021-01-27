@@ -202,7 +202,7 @@ fn optimize(file: &DirEntry, target_quality: f32) {
     cmd.output().unwrap();
 }
 
-fn segment(input: &Path) -> Vec<std::result::Result<DirEntry, std::io::Error>> {
+fn segment(input: &Path) -> Vec<Result<DirEntry, std::io::Error>> {
     let segments = Path::new("temp/segments");
     let mut cmd = Command::new("ffmpeg");
     cmd.args(&[
