@@ -8,6 +8,14 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use regex::Regex;
 use structopt::StructOpt;
 
+#[macro_use]
+extern crate log;
+
+use simplelog::{ConfigBuilder, LevelFilter, LevelPadding, TermLogger, TerminalMode};
+
+const SUPPORTED_AUDIO_FORMAT_EXTENSIONS: &[&str] =
+    &["flac", "wav", "opus", "ogg", "m4a", "aac", "mp3"];
+
 /// Opus bitrate optimizer
 #[derive(StructOpt, Debug)]
 #[structopt(author)]
@@ -23,27 +31,80 @@ struct Args {
     /// Number of jobs to run
     #[structopt(short, long)]
     jobs: Option<usize>,
+
+    /// Log level (possible values: OFF, ERROR, WARN, INFO, DEBUG, TRACE)
+    #[structopt(short, long = "log", default_value = "INFO")]
+    log_level: LevelFilter,
+
+    /// Model to use for visqol calculations
+    #[structopt(short, long)]
+    model: PathBuf,
+
+    /// Keep temporary folder
+    #[structopt(short, long)]
+    keep: bool,
+}
+
+fn is_program_in_path(program: &str) -> bool {
+    which::which(program).is_ok()
 }
 
 fn main() -> anyhow::Result<()> {
     let args = Args::from_args();
 
+    TermLogger::init(
+        args.log_level,
+        ConfigBuilder::new()
+            .set_level_padding(LevelPadding::Left)
+            .set_time_level(LevelFilter::Off)
+            .build(),
+        TerminalMode::Mixed,
+    )?;
+
     // check if executables exist after getting CLI args
     if !is_program_in_path("ffmpeg") {
-        println!("FFmpeg is not installed or in PATH, required for encoding audio");
+        error!("FFmpeg is not installed or in PATH, required for encoding audio");
         return Ok(());
     }
 
     if !is_program_in_path("visqol") {
-        println!("visqol is not installed or in PATH, required for perceptual quality metrics");
+        error!("visqol is not installed or in PATH, required for perceptual quality metrics");
         return Ok(());
+    }
+
+    if !args.input.exists() {
+        error!("The file {:?} does not exist", args.input);
+        return Ok(());
+    }
+
+    match args.input.extension() {
+        Some(ext) => match ext.to_str() {
+            Some(ext) => {
+                if !SUPPORTED_AUDIO_FORMAT_EXTENSIONS.contains(&ext) {
+                    error!("Unsupported file (unknown extension '{}')", ext);
+                    info!(
+                        "Supported file extensions: {:?}",
+                        SUPPORTED_AUDIO_FORMAT_EXTENSIONS
+                    );
+                    return Ok(());
+                }
+            }
+            None => {
+                error!("Unsupported file (extension {:?} is invalid UTF-8)", ext);
+                return Ok(());
+            }
+        },
+        _ => {
+            error!("Unsupported file (no file extension)");
+            return Ok(());
+        }
     }
 
     // Create all required temp dirs
     create_all_dirs()?;
 
-    println!(":: Using input file {:?}", args.input);
-    println!(":: Using target quality {}", args.target_quality);
+    info!("Input file: {:?}", args.input);
+    info!("Target quality: {:.2}", args.target_quality);
 
     // making wav and segmenting
     let wav_segments = segment(&args.input);
@@ -55,17 +116,21 @@ fn main() -> anyhow::Result<()> {
 
     let jobs = cmp::min(args.jobs.unwrap_or_else(|| num_cpus::get() / 2), it.len());
 
-    println!(":: Segments {}", it.len());
-    println!(":: Running {} jobs", jobs);
+    info!("Segments: {}", it.len());
+    info!("Running {} jobs", jobs);
 
     rayon::ThreadPoolBuilder::new()
         .num_threads(jobs as usize)
         .build_global()?;
 
-    // it.par_iter().for_each(|x| optimize(x, args.target_quality));
-    it.iter().for_each(|x| optimize(x, args.target_quality));
+    it.par_iter()
+        .for_each(|x| optimize(x, args.target_quality, &args.model));
 
     concatenate(&args.input)?;
+
+    if !args.keep {
+        fs::remove_dir_all("temp")?;
+    }
 
     Ok(())
 }
@@ -91,7 +156,7 @@ fn create_all_dirs() -> anyhow::Result<()> {
 }
 
 fn concatenate(output: &Path) -> anyhow::Result<()> {
-    println!(":: Concatenating");
+    info!("Concatenating");
     let conc_file = Path::new("temp/concat.txt");
     let conc_folder = Path::new("temp/conc");
     let fl = fs::read_dir(conc_folder)?;
@@ -135,10 +200,10 @@ fn concatenate(output: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn optimize(file: &DirEntry, target_quality: f32) {
+fn optimize(file: &DirEntry, target_quality: f32, model: &Path) {
     // get metric score
-    let mut bitrate: u32 = 96;
-    let mut count: u32 = 0;
+    let mut bitrate: u32 = 96000;
+    let mut count: usize = 0;
     let mut score: f32 = 0.0;
     let path = file.path();
     let stem = path.file_stem().unwrap().to_str().unwrap();
@@ -151,30 +216,30 @@ fn optimize(file: &DirEntry, target_quality: f32) {
         count += 1;
 
         if count > 8 {
-            println!(
-                ":: # {} Exceed {} probes, Found B: {}, Score {:.2}",
+            info!(
+                "# {} Exceed {} probes, Found B: {}, Score {:.2}",
                 stem, count, bitrate, score
             );
             break;
         }
+
         let pf = file.path();
-        score = make_probe(pf, bitrate);
-        score = transform_score(score);
+        score = transform_score(make_probe(pf, bitrate, model));
         bitrates.push((bitrate, score));
 
         let dif: f32 = (score - target_quality).abs();
 
         if dif < 0.3 {
-            println!(":: # {} Found B: {}, Score {:.2}", stem, bitrate, score);
+            info!("# {} Found B: {}, Score {:.2}", stem, bitrate, score);
             break;
         }
 
-        // println!(":: # {} Probe: {} B: {}, Score: {:.2}", stem, count, bitrate, score);
+        // println!("# {} Probe: {} B: {}, Score: {:.2}", stem, count, bitrate, score);
 
         bitrate = ((target_quality / score) * (bitrate as f32)) as u32;
-        // println!(":: New: {}", bitrate)
+        // println!("New: {}", bitrate)
     }
-    println!(":: # {} Found B: {}, Score {:.2}", stem, bitrate, score);
+    info!("# {} Found B: {}, Score {:.2}", stem, bitrate, score);
 
     let mut cmd = Command::new("ffmpeg");
     cmd.args(&[
@@ -184,7 +249,7 @@ fn optimize(file: &DirEntry, target_quality: f32) {
         "-c:a",
         "libopus",
         "-b:a",
-        &format!("{}K", bitrate),
+        &format!("{}", bitrate),
         &format!("temp/conc/{}.opus", stem),
     ]);
     cmd.output().unwrap();
@@ -224,10 +289,10 @@ fn transform_score(score: f32) -> f32 {
     }
 }
 
-fn make_probe(fl: PathBuf, bitrate: u32) -> f32 {
-    let file_str: &str = fl.to_str().unwrap();
+fn make_probe(file: PathBuf, bitrate: u32, model: &Path) -> f32 {
+    let file_str: &str = file.to_str().unwrap();
     // Audio to opus
-    let probe_name = fl.file_stem().unwrap().to_str().unwrap();
+    let probe_name = file.file_stem().unwrap().to_str().unwrap();
 
     let mut cmd = Command::new("ffmpeg");
     cmd.args(&[
@@ -237,7 +302,7 @@ fn make_probe(fl: PathBuf, bitrate: u32) -> f32 {
         "-c:a",
         "libopus",
         "-b:a",
-        &format!("{}K", bitrate),
+        &format!("{}", bitrate),
         &format!("temp/probes/{}{}.opus", probe_name, bitrate),
     ]);
     cmd.output().unwrap();
@@ -252,11 +317,13 @@ fn make_probe(fl: PathBuf, bitrate: u32) -> f32 {
         "48000",
         &format!("temp/probes/{}{}.wav", probe_name, bitrate),
     ]);
-    cmd.output().expect("can't  convert opus");
+    cmd.output().expect("opus encoding failed");
 
     // calculating score
     let mut cmd = Command::new("visqol");
     cmd.args(&[
+        "--similarity_to_quality_model",
+        model.to_str().unwrap(),
         "--reference_file",
         file_str,
         "--degraded_file",
@@ -267,15 +334,13 @@ fn make_probe(fl: PathBuf, bitrate: u32) -> f32 {
     cmd.stderr(Stdio::piped());
 
     let output = cmd.output().unwrap();
+    debug!("{:?}", output);
+
     let re = Regex::new(r"([0-9]*\.[0-9]*)").unwrap();
     let score_str = String::from_utf8(output.stdout).unwrap();
 
-    let caps = dbg!(re.captures(dbg!(&score_str))).unwrap();
+    let caps = re.captures(&score_str).unwrap();
     let score: &str = caps.get(1).map_or("", |m| m.as_str());
 
     score.parse().unwrap()
-}
-
-fn is_program_in_path(program: &str) -> bool {
-    which::which(program).is_ok()
 }
