@@ -40,7 +40,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     // Create all required temp dirs
-    create_all_dir()?;
+    create_all_dirs()?;
 
     let mut jobs = args.jobs.unwrap_or_else(|| num_cpus::get() / 2);
 
@@ -82,7 +82,7 @@ macro_rules! remove_and_create {
     }};
 }
 
-fn create_all_dir() -> anyhow::Result<()> {
+fn create_all_dirs() -> anyhow::Result<()> {
     // creating temp dir/removing old
 
     remove_and_create!("temp");
