@@ -1,6 +1,3 @@
-use rayon::prelude::*;
-use regex::Regex;
-
 use std::cmp;
 use std::fs::{self, DirEntry, File};
 use std::io::prelude::*;
@@ -8,6 +5,8 @@ use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use regex::Regex;
 use structopt::StructOpt;
 
 /// Opus bitrate optimizer
