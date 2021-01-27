@@ -196,8 +196,8 @@ fn optimize(file: &DirEntry, target_quality: f32) {
         "-c:a",
         "libopus",
         "-b:a",
-        &format!("{}K", &bitrate.to_string()),
-        &format!("temp/conc/{}.opus", stem),
+        format!("{}K", bitrate).as_str(),
+        format!("temp/conc/{}.opus", stem).as_str(),
     ]);
     cmd.output().unwrap();
 }
@@ -221,11 +221,7 @@ fn segment(input: &Path) -> Vec<Result<DirEntry, std::io::Error>> {
     ]);
     cmd.output().unwrap();
 
-    let mut vc = vec![];
-    let files = fs::read_dir(&segments).unwrap();
-
-    vc.extend(files);
-    vc
+    fs::read_dir(&segments).unwrap().collect()
 }
 
 /// Transform score for easier score comprehension and usage
