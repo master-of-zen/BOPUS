@@ -13,7 +13,7 @@ use structopt::StructOpt;
 
 /// Opus bitrate optimizer
 #[derive(StructOpt, Debug)]
-#[structopt(author = "Zen <true.grenight@gmail.com>>")]
+#[structopt(author)]
 struct Args {
     /// Input file to use
     #[structopt(short, long)]
