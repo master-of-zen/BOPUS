@@ -1,22 +1,37 @@
-extern crate execute;
-extern crate num_cpus;
-extern crate regex;
-extern crate threadpool;
-use clap::{App, Arg};
 use rayon::prelude::*;
 use regex::Regex;
+
 use std::cmp;
 use std::env;
 use std::fs;
-use std::fs::DirEntry;
-use std::fs::File;
+use std::fs::{DirEntry, File};
 use std::io::prelude::*;
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+use structopt::StructOpt;
+
+/// Opus bitrate optimizer
+#[derive(StructOpt, Debug)]
+#[structopt(author = "Zen <true.grenight@gmail.com>>")]
+struct Args {
+    /// Input file to use
+    #[structopt(short, long)]
+    input: PathBuf,
+
+    /// Value of quality to target
+    #[structopt(short, long = "target", default_value = "4.0")]
+    target_quality: f32,
+
+    /// Number of jobs to run
+    #[structopt(short, long)]
+    jobs: Option<usize>,
+}
+
 fn main() {
-    // check if executables exist
+    let args = Args::from_args();
+
+    // check if executables exist after getting CLI args
     if !is_program_in_path("ffmpeg") {
         println!("No.");
     }
@@ -25,60 +40,22 @@ fn main() {
         println!("No.");
     }
 
-    // arg parsing
-    let _matches = App::new("Bopus")
-        .version("0.1")
-        .author("Zen <true.grenight@gmail.com>>")
-        .about("Opus bitrate optimizer")
-        .arg(
-            Arg::with_name("INPUT")
-                .short("i")
-                .long("input")
-                .value_name("INPUT")
-                .help("Sets the input file to use")
-                .required(true)
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("TARGET")
-                .short("t")
-                .long("target")
-                .help("Sets value of quality to target")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("JOBS")
-                .short("j")
-                .long("jobs")
-                .help("set amount of jobs to run")
-                .takes_value(true),
-        )
-        .get_matches();
-
     // Create all required temp dirs
     create_all_dir();
 
-    let input_file: &str = _matches.value_of("INPUT").unwrap();
-    let target_quality: f32 = _matches.value_of("TARGET").unwrap_or("4").parse().unwrap();
-
-    let cpu_cores: i32 = (num_cpus::get() / 2) as i32;
-    let mut jobs: i32 = _matches
-        .value_of("JOBS")
-        .unwrap_or(&format!("{}", cpu_cores))
-        .parse()
-        .unwrap();
+    let mut jobs = args.jobs.unwrap_or_else(|| num_cpus::get() / 2);
 
     // printing some stuff
-    println!(":: Using input file {}", input_file);
-    println!(":: Using target quality {}", target_quality);
+    println!(":: Using input file {:?}", args.input);
+    println!(":: Using target quality {}", args.target_quality);
 
     // making wav and segmenting
-    let wav_segments = segment(input_file);
+    let wav_segments = segment(&args.input);
     let mut it = vec![];
     for seg in wav_segments {
         it.push(seg.unwrap())
     }
-    jobs = cmp::min(jobs, it.len() as i32);
+    jobs = cmp::min(jobs, it.len());
 
     println!(":: Segments {}", it.len());
     println!(":: Running {} jobs", jobs);
@@ -88,9 +65,9 @@ fn main() {
         .build_global()
         .unwrap();
 
-    it.par_iter().for_each(move |x| optimize(x, target_quality));
+    it.par_iter().for_each(|x| optimize(x, args.target_quality));
 
-    concatenate(input_file);
+    concatenate(&args.input);
 }
 
 fn create_all_dir() {
@@ -129,7 +106,7 @@ fn create_all_dir() {
     }
 }
 
-fn concatenate(output: &str) {
+fn concatenate(output: &Path) {
     println!(":: Concatenating");
     let conc_file = Path::new("temp/concat.txt");
     let conc_folder = Path::new("temp/conc");
@@ -161,12 +138,12 @@ fn concatenate(output: &str) {
         "-f",
         "concat",
         "-i",
-        conc_file.to_str().unwrap(),
+        conc_file.to_str().expect("Filename is not valid UTF-8"),
         "-c",
         "copy",
         out,
     ]);
-    //println!("{:?}", cmd);
+
     cmd.output().expect("Failed to concatenate");
 }
 
@@ -225,13 +202,15 @@ fn optimize(file: &DirEntry, target_quality: f32) {
     cmd.output().unwrap();
 }
 
-fn segment(input: &str) -> Vec<std::result::Result<DirEntry, std::io::Error>> {
+fn segment(input: &Path) -> Vec<std::result::Result<DirEntry, std::io::Error>> {
     let segments = Path::new("temp/segments");
     let mut cmd = Command::new("ffmpeg");
     cmd.args(&[
         "-y",
         "-i",
-        input,
+        // TODO check if filename can be written as a UTF-8 string, or escape
+        // the chars when passing to ffmpeg when it isn't
+        input.to_str().expect("Filename is not valid UTF-8"),
         "-ar",
         "48000",
         "-f",
