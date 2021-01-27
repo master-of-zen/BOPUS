@@ -33,10 +33,12 @@ fn main() -> anyhow::Result<()> {
     // check if executables exist after getting CLI args
     if !is_program_in_path("ffmpeg") {
         println!("FFmpeg is not installed or in PATH, required for encoding audio");
+        return Ok(());
     }
 
     if !is_program_in_path("visqol") {
         println!("visqol is not installed or in PATH, required for perceptual quality metrics");
+        return Ok(());
     }
 
     // Create all required temp dirs
