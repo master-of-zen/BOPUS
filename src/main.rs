@@ -1,12 +1,12 @@
 use rayon::prelude::*;
 use regex::Regex;
 
-use std::cmp;
 use std::fs;
 use std::fs::{DirEntry, File};
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::{cmp, os::unix::prelude::OsStrExt};
 
 use structopt::StructOpt;
 
@@ -69,7 +69,7 @@ fn main() -> anyhow::Result<()> {
 
     it.par_iter().for_each(|x| optimize(x, args.target_quality));
 
-    concatenate(&args.input);
+    concatenate(&args.input)?;
 
     Ok(())
 }
@@ -95,17 +95,17 @@ fn create_all_dirs() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn concatenate(output: &Path) {
+fn concatenate(output: &Path) -> anyhow::Result<()> {
     println!(":: Concatenating");
     let conc_file = Path::new("temp/concat.txt");
     let conc_folder = Path::new("temp/conc");
-    let fl = fs::read_dir(conc_folder).unwrap();
+    let fl = fs::read_dir(conc_folder)?;
 
     let mut txt = String::new();
     let mut t = Vec::new();
 
     for seg in fl {
-        t.push(seg.unwrap());
+        t.push(seg?);
     }
     t.sort_by_key(|k| k.path());
 
@@ -114,10 +114,12 @@ fn concatenate(output: &Path) {
         txt.push_str(&st);
     }
     let pt = Path::new(output).with_extension("opus");
-    let out: &str = pt.to_str().unwrap();
 
-    let mut file = File::create(conc_file).unwrap();
-    file.write_all(txt.as_bytes()).unwrap();
+    // check if filename is valid UTF-8
+    let out: &str = std::str::from_utf8(pt.as_os_str().as_bytes())?;
+
+    let mut file = File::create(conc_file)?;
+    file.write_all(txt.as_bytes())?;
 
     let mut cmd = Command::new("ffmpeg");
     cmd.args(&[
@@ -127,13 +129,16 @@ fn concatenate(output: &Path) {
         "-f",
         "concat",
         "-i",
-        conc_file.to_str().expect("Filename is not valid UTF-8"),
+        // cannot fail, conc_file has a valid UTF-8 filename
+        conc_file.to_str().unwrap(),
         "-c",
         "copy",
         out,
     ]);
 
-    cmd.output().expect("Failed to concatenate");
+    cmd.output()?;
+
+    Ok(())
 }
 
 fn optimize(file: &DirEntry, target_quality: f32) {
