@@ -224,7 +224,7 @@ fn optimize(file: &DirEntry, target_quality: f32, model: &Path) {
         }
 
         let pf = file.path();
-        score = transform_score(make_probe(pf, bitrate, model));
+        score = transform_score(make_probe(&pf, bitrate, model));
         bitrates.push((bitrate, score));
 
         let dif: f32 = (score - target_quality).abs();
@@ -289,7 +289,7 @@ fn transform_score(score: f32) -> f32 {
     }
 }
 
-fn make_probe(file: PathBuf, bitrate: u32, model: &Path) -> f32 {
+fn make_probe(file: &Path, bitrate: u32, model: &Path) -> f32 {
     let file_str: &str = file.to_str().unwrap();
     // Audio to opus
     let probe_name = file.file_stem().unwrap().to_str().unwrap();
