@@ -171,7 +171,7 @@ fn optimize(file: &DirEntry, target_quality: f32) {
         }
         let pf = file.path();
         score = make_probe(pf, bitrate);
-        score = trasnform_score(score);
+        score = transform_score(score);
         bitrates.push((bitrate, score));
 
         let dif: f32 = (score - target_quality).abs();
@@ -230,7 +230,7 @@ fn segment(input: &Path) -> Vec<Result<DirEntry, std::io::Error>> {
 
 /// Transform score for easier score comprehension and usage
 /// Scaled 4.0 - 4.75 range to 0.0 - 5.0
-fn trasnform_score(score: f32) -> f32 {
+fn transform_score(score: f32) -> f32 {
     if score < 4.1 {
         return 1.0f32;
     }
