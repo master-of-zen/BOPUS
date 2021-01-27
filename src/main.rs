@@ -1,12 +1,12 @@
 use rayon::prelude::*;
 use regex::Regex;
 
-use std::fs;
-use std::fs::{DirEntry, File};
+use std::cmp;
+use std::fs::{self, DirEntry, File};
 use std::io::prelude::*;
+use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::{cmp, os::unix::prelude::OsStrExt};
 
 use structopt::StructOpt;
 
