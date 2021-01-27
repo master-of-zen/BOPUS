@@ -1,7 +1,6 @@
 use std::cmp;
 use std::fs::{self, DirEntry, File};
 use std::io::prelude::*;
-// use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -43,7 +42,6 @@ fn main() -> anyhow::Result<()> {
     // Create all required temp dirs
     create_all_dirs()?;
 
-    // printing some stuff
     println!(":: Using input file {:?}", args.input);
     println!(":: Using target quality {}", args.target_quality);
 
@@ -64,7 +62,8 @@ fn main() -> anyhow::Result<()> {
         .num_threads(jobs as usize)
         .build_global()?;
 
-    it.par_iter().for_each(|x| optimize(x, args.target_quality));
+    // it.par_iter().for_each(|x| optimize(x, args.target_quality));
+    it.iter().for_each(|x| optimize(x, args.target_quality));
 
     concatenate(&args.input)?;
 
@@ -82,8 +81,7 @@ macro_rules! remove_and_create {
 }
 
 fn create_all_dirs() -> anyhow::Result<()> {
-    // creating temp dir/removing old
-
+    // creating temp dir/removing old ones if they exist
     remove_and_create!("temp");
     remove_and_create!("temp/segments");
     remove_and_create!("temp/probes");
@@ -272,7 +270,7 @@ fn make_probe(fl: PathBuf, bitrate: u32) -> f32 {
     let re = Regex::new(r"([0-9]*\.[0-9]*)").unwrap();
     let score_str = String::from_utf8(output.stdout).unwrap();
 
-    let caps = re.captures(&score_str).unwrap();
+    let caps = dbg!(re.captures(dbg!(&score_str))).unwrap();
     let score: &str = caps.get(1).map_or("", |m| m.as_str());
 
     score.parse().unwrap()
