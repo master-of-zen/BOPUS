@@ -43,6 +43,9 @@ fn main() -> anyhow::Result<()> {
     // Create all required temp dirs
     create_all_dirs()?;
 
+    // Create model file
+    create_model()?;
+
     // printing some stuff
     println!(":: Using input file {:?}", args.input);
     println!(":: Using target quality {}", args.target_quality);
@@ -91,6 +94,16 @@ fn create_all_dirs() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+fn create_model() -> anyhow::Result<()>{
+    // Writes included model to temp folder
+    static MODEL: &'static str = include_str!("./visqol_model.txt");
+    let model_file = Path::new("temp/model.txt");
+    let mut file = File::create(model_file)?;
+    file.write_all(MODEL.as_bytes())?;
+    Ok(())
+}
+
 
 fn concatenate(output: &Path) -> anyhow::Result<()> {
     println!(":: Concatenating");
@@ -259,6 +272,8 @@ fn make_probe(fl: PathBuf, bitrate: u32) -> f32 {
     // calculating score
     let mut cmd = Command::new("visqol");
     cmd.args(&[
+        "--similarity_to_quality_model",
+        "temp/model.txt",
         "--reference_file",
         file_str,
         "--degraded_file",
