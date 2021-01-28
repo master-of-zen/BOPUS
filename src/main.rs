@@ -159,6 +159,7 @@ fn optimize(file: &DirEntry, target_quality: f32) {
     let stem = path.file_stem().unwrap().to_str().unwrap();
     let file_str: &str = path.to_str().unwrap();
     let mut bitrates: Vec<(u32, f32)> = vec![];
+    let tolerance: f32 = 0.2;
     // bitrate | score
 
     // Search loop
@@ -179,7 +180,7 @@ fn optimize(file: &DirEntry, target_quality: f32) {
 
         let dif: f32 = (score - target_quality).abs();
 
-        if dif < 0.3 {
+        if dif < tolerance {
             println!(":: # {} Found B: {}, Score {:.2}", stem, bitrate, score);
             break;
         }
