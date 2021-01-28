@@ -252,7 +252,12 @@ fn optimize(file: &DirEntry, target_quality: f32, model: &Path) {
         // println!("# {} Probe: {} B: {}, Score: {:.2}", stem, count, bitrate, score);
 
         bitrate = ((target_quality / score) * (bitrate as f32)) as u32;
-        // println!("New: {}", bitrate)
+
+        if bitrate > 512000 {
+            bitrate = 512000;
+        } else if bitrate < 500 {
+            bitrate = 500;
+        }
     }
     info!("# {} Found B: {}, Score {:.2}", stem, bitrate, score);
 
@@ -318,7 +323,7 @@ fn make_probe(file: &Path, bitrate: u32, model: &Path) -> f32 {
         "libopus",
         "-b:a",
         &format!("{}", bitrate),
-        &format!("temp/probes/{}{}.opus", probe_name, bitrate),
+        &format!("temp/probes/{}_{}.opus", probe_name, bitrate),
     ]);
     cmd.output().unwrap();
 
@@ -327,22 +332,23 @@ fn make_probe(file: &Path, bitrate: u32, model: &Path) -> f32 {
     cmd.args(&[
         "-y",
         "-i",
-        &format!("temp/probes/{}{}.opus", probe_name, bitrate),
+        &format!("temp/probes/{}_{}.opus", probe_name, bitrate),
         "-ar",
         "48000",
-        &format!("temp/probes/{}{}.wav", probe_name, bitrate),
+        &format!("temp/probes/{}_{}.wav", probe_name, bitrate),
     ]);
     cmd.output().expect("opus encoding failed");
 
     // calculating score
     let mut cmd = Command::new("visqol");
+
     cmd.args(&[
         "--similarity_to_quality_model",
         model.to_str().unwrap(),
         "--reference_file",
         file_str,
         "--degraded_file",
-        &format!("temp/probes/{}{}.wav", probe_name, bitrate),
+        &format!("temp/probes/{}_{}.wav", probe_name, bitrate),
     ]);
 
     cmd.stdout(Stdio::piped());
