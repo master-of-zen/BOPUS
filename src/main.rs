@@ -246,7 +246,6 @@ fn optimize(file: &DirEntry, target_quality: f32, model: &Path) {
         let dif: f32 = (score - target_quality).abs();
 
         if dif < TOLERANCE {
-            info!("# {} Found B: {}, Score {:.2}", stem, bitrate, score);
             break;
         }
 
