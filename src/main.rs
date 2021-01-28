@@ -102,9 +102,19 @@ fn main() -> anyhow::Result<()> {
 
     // Create all required temp dirs
     create_all_dirs()?;
-
+    
+    // Create model file
+    create_model()?;
+  
     info!("Input file: {:?}", args.input);
     info!("Target quality: {:.2}", args.target_quality);
+
+
+
+    // printing some stuff
+    println!(":: Using input file {:?}", args.input);
+    println!(":: Using target quality {}", args.target_quality);
+
 
     // making wav and segmenting
     let wav_segments = segment(&args.input);
@@ -154,6 +164,16 @@ fn create_all_dirs() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+fn create_model() -> anyhow::Result<()>{
+    // Writes included model to temp folder
+    static MODEL: &'static str = include_str!("./visqol_model.txt");
+    let model_file = Path::new("temp/model.txt");
+    let mut file = File::create(model_file)?;
+    file.write_all(MODEL.as_bytes())?;
+    Ok(())
+}
+
 
 fn concatenate(output: &Path) -> anyhow::Result<()> {
     info!("Concatenating");
@@ -209,6 +229,7 @@ fn optimize(file: &DirEntry, target_quality: f32, model: &Path) {
     let stem = path.file_stem().unwrap().to_str().unwrap();
     let file_str: &str = path.to_str().unwrap();
     let mut bitrates: Vec<(u32, f32)> = vec![];
+    let tolerance: f32 = 0.2;
     // bitrate | score
 
     // Search loop
@@ -229,7 +250,7 @@ fn optimize(file: &DirEntry, target_quality: f32, model: &Path) {
 
         let dif: f32 = (score - target_quality).abs();
 
-        if dif < 0.3 {
+        if dif < tolerance {
             info!("# {} Found B: {}, Score {:.2}", stem, bitrate, score);
             break;
         }
