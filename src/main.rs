@@ -36,9 +36,9 @@ struct Args {
     #[structopt(short, long = "log", default_value = "INFO")]
     log_level: LevelFilter,
 
-    /// Model to use for visqol calculations
+    /// Model to use for visqol calculations. If not specified, the default model is used
     #[structopt(short, long)]
-    model: PathBuf,
+    model: Option<PathBuf>,
 
     /// Keep temporary folder
     #[structopt(long)]
@@ -102,19 +102,14 @@ fn main() -> anyhow::Result<()> {
 
     // Create all required temp dirs
     create_all_dirs()?;
-    
-    // Create model file
-    create_model()?;
-  
+
+    let model: &Path = match args.model {
+        Some(ref model) => model.as_path(),
+        None => create_model()?,
+    };
+
     info!("Input file: {:?}", args.input);
     info!("Target quality: {:.2}", args.target_quality);
-
-
-
-    // printing some stuff
-    println!(":: Using input file {:?}", args.input);
-    println!(":: Using target quality {}", args.target_quality);
-
 
     // making wav and segmenting
     let wav_segments = segment(&args.input);
@@ -134,7 +129,7 @@ fn main() -> anyhow::Result<()> {
         .build_global()?;
 
     it.par_iter()
-        .for_each(|x| optimize(x, args.target_quality, &args.model));
+        .for_each(|x| optimize(x, args.target_quality, model));
 
     concatenate(&args.input)?;
 
@@ -165,15 +160,14 @@ fn create_all_dirs() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn create_model() -> anyhow::Result<()>{
+fn create_model<'a>() -> anyhow::Result<&'a Path> {
     // Writes included model to temp folder
-    static MODEL: &'static str = include_str!("./visqol_model.txt");
+    const MODEL: &[u8] = include_bytes!("models/visqol_model.txt");
     let model_file = Path::new("temp/model.txt");
     let mut file = File::create(model_file)?;
-    file.write_all(MODEL.as_bytes())?;
-    Ok(())
+    file.write_all(MODEL)?;
+    Ok(model_file)
 }
-
 
 fn concatenate(output: &Path) -> anyhow::Result<()> {
     info!("Concatenating");
@@ -221,6 +215,8 @@ fn concatenate(output: &Path) -> anyhow::Result<()> {
 }
 
 fn optimize(file: &DirEntry, target_quality: f32, model: &Path) {
+    const TOLERANCE: f32 = 0.2;
+
     // get metric score
     let mut bitrate: u32 = 96000;
     let mut count: usize = 0;
@@ -229,7 +225,6 @@ fn optimize(file: &DirEntry, target_quality: f32, model: &Path) {
     let stem = path.file_stem().unwrap().to_str().unwrap();
     let file_str: &str = path.to_str().unwrap();
     let mut bitrates: Vec<(u32, f32)> = vec![];
-    let tolerance: f32 = 0.2;
     // bitrate | score
 
     // Search loop
@@ -250,7 +245,7 @@ fn optimize(file: &DirEntry, target_quality: f32, model: &Path) {
 
         let dif: f32 = (score - target_quality).abs();
 
-        if dif < tolerance {
+        if dif < TOLERANCE {
             info!("# {} Found B: {}, Score {:.2}", stem, bitrate, score);
             break;
         }
