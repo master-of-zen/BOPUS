@@ -215,6 +215,8 @@ fn concatenate(output: &Path) -> anyhow::Result<()> {
 }
 
 fn optimize(file: &DirEntry, target_quality: f32, model: &Path) {
+    const TOLERANCE: f32 = 0.2;
+
     // get metric score
     let mut bitrate: u32 = 96000;
     let mut count: usize = 0;
@@ -223,7 +225,6 @@ fn optimize(file: &DirEntry, target_quality: f32, model: &Path) {
     let stem = path.file_stem().unwrap().to_str().unwrap();
     let file_str: &str = path.to_str().unwrap();
     let mut bitrates: Vec<(u32, f32)> = vec![];
-    let tolerance: f32 = 0.2;
     // bitrate | score
 
     // Search loop
@@ -244,7 +245,7 @@ fn optimize(file: &DirEntry, target_quality: f32, model: &Path) {
 
         let dif: f32 = (score - target_quality).abs();
 
-        if dif < tolerance {
+        if dif < TOLERANCE {
             info!("# {} Found B: {}, Score {:.2}", stem, bitrate, score);
             break;
         }
