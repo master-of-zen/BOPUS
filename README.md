@@ -18,8 +18,11 @@ Bopus search for bitrate of OPUS that will result in desired quality. Quality of
 -i, --input <input>              Input file to use
 -t, --target <target-quality>    Value of quality to target [default: 4.0]
 -j, --jobs <jobs>                Number of jobs to run[default: all cpu cores]
--m, --model <model>              Model to use for visqol calculations. If not specified, the default model is used
--l, --log <log-level>            Log level (possible values: OFF, ERROR, WARN, INFO, DEBUG, TRACE) [default: INFO]
+-m, --model <model>              Model to use for visqol calculations. 
+                                 If not specified, the default model is used
+-l, --log <log-level>            Log level 
+                                 (OFF, ERROR, WARN, INFO, DEBUG, TRACE) 
+                                 [default: INFO]
 ```
 ## Support me
 Bitcoin - `1gU9aQ2qqoQPuvop2jqC68JKZh5cyCivG`
