@@ -170,6 +170,7 @@ fn create_model<'a>() -> anyhow::Result<&'a Path> {
 }
 
 fn concatenate(output: &Path) -> anyhow::Result<()> {
+    // FIXME: Fix audio silence on concat
     info!("Concatenating");
     let conc_file = Path::new("temp/concat.txt");
     let conc_folder = Path::new("temp/conc");
