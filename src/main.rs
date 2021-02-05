@@ -277,6 +277,7 @@ fn optimize(file: &DirEntry, target_quality: f32, model: &Path) {
 }
 
 fn segment(input: &Path) -> Vec<Result<DirEntry, std::io::Error>> {
+    // FIXME: Don't allow to segment be less that 5 sec
     let segments = Path::new("temp/segments");
     let mut cmd = Command::new("ffmpeg");
     cmd.args(&[
