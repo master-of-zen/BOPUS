@@ -15,7 +15,6 @@ use simplelog::{ConfigBuilder, LevelFilter, LevelPadding, TermLogger, TerminalMo
 
 const SUPPORTED_AUDIO_FORMAT_EXTENSIONS: &[&str] =
     &["flac", "wav", "opus", "ogg", "m4a", "aac", "mp3"];
-
 /// Opus bitrate optimizer
 #[derive(StructOpt, Debug)]
 #[structopt(author)]
@@ -138,6 +137,21 @@ fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn get_audio_time(input: &Path) {
+    // FIXME: Don't allow to segment be less that 5 sec
+    let mut cmd = Command::new("ffmpeg");
+    cmd.args(&[
+        "-y",
+        "-i",
+        input.to_str().expect("Filename is not valid UTF-8"),
+    ]);
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+
+    let output = cmd.output().unwrap();
+    debug!("{:?}", output);
 }
 
 macro_rules! remove_and_create {
