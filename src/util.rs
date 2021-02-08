@@ -31,8 +31,7 @@ pub fn get_audio_time(input: &Path) -> Duration {
     const START: &str = "Duration: ";
     const END: &str = ", start";
 
-    let s =
-        output[output.find(START).unwrap() + START.len()..output.find(END).unwrap()].to_string();
+    let s = &output[output.find(START).unwrap() + START.len()..output.find(END).unwrap()];
 
     let mut iter = s.split(':');
     // TODO clean up the error handling here

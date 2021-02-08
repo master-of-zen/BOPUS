@@ -353,8 +353,10 @@ fn make_probe(file: &Path, bitrate: u32, model: &Path) -> Result<f32> {
     cmd.arg(model);
     cmd.arg("--reference_file");
     cmd.arg(file);
-    cmd.arg("--degraded_file");
-    cmd.arg(&format!("temp/probes/{}_{}.wav", probe_name, bitrate));
+    cmd.args(&[
+        "--degraded_file",
+        &format!("temp/probes/{}_{}.wav", probe_name, bitrate),
+    ]);
 
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
