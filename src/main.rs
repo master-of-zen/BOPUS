@@ -1,4 +1,5 @@
 use std::cmp;
+use std::ffi::{OsStr, OsString};
 use std::fs::{self, DirEntry, File};
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
@@ -142,11 +143,9 @@ fn main() -> anyhow::Result<()> {
 fn get_audio_time(input: &Path) {
     // FIXME: Don't allow to segment be less that 5 sec
     let mut cmd = Command::new("ffmpeg");
-    cmd.args(&[
-        "-y",
-        "-i",
-        input.to_str().expect("Filename is not valid UTF-8"),
-    ]);
+    cmd.args(&["-y", "-i"]);
+    cmd.arg(input);
+
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
 
@@ -183,6 +182,25 @@ fn create_model<'a>() -> anyhow::Result<&'a Path> {
     Ok(model_file)
 }
 
+// copied from Rust std
+fn os_str_as_u8_slice(s: &OsStr) -> &[u8] {
+    unsafe { &*(s as *const OsStr as *const [u8]) }
+}
+
+fn u8_slice_as_os_str(s: &[u8]) -> &OsStr {
+    // SAFETY: see the comment of `os_str_as_u8_slice`
+    unsafe { &*(s as *const [u8] as *const OsStr) }
+}
+
+// // Ideally, concat.txt on Windows would be created with UTF-16 encoding
+// #[cfg(not(unix))]
+// fn os_str_to_byte_slice(s: &OsStr) -> &[u8] {
+//     s.to_owned()
+//         .into_string()
+//         .expect("Unsupported conversion from OsString to byte array on non-Unix platforms")
+//         .as_bytes()
+// }
+
 fn concatenate(output: &Path) -> anyhow::Result<()> {
     // FIXME: Fix audio silence on concat
     info!("Concatenating");
@@ -190,39 +208,28 @@ fn concatenate(output: &Path) -> anyhow::Result<()> {
     let conc_folder = Path::new("temp/conc");
     let fl = fs::read_dir(conc_folder)?;
 
-    let mut txt = String::new();
-    let mut t = Vec::new();
-
-    for seg in fl {
-        t.push(seg?);
-    }
+    let mut t: Vec<DirEntry> = fl.into_iter().collect::<Result<Vec<_>, _>>()?;
     t.sort_by_key(|k| k.path());
 
+    // save some allocations by giving initial buffer with a capacity close to what it would actually be
+    let mut txt: Vec<u8> = Vec::with_capacity(t.len() * (b"file 'conc/'\n".len() + 8));
     for p in t {
-        let st = format!("file 'conc/{}' \n", p.file_name().to_str().unwrap());
-        txt.push_str(&st);
+        // FIXME if the filename contains the ' character, does ffmpeg properly handle it?
+        txt.extend_from_slice(b"file 'conc/");
+        txt.extend_from_slice(os_str_as_u8_slice(&p.file_name()));
+        txt.extend_from_slice(b"'\n");
     }
+
     let pt = Path::new(output).with_extension("opus");
 
-    let out = pt.to_string_lossy();
-
     let mut file = File::create(conc_file)?;
-    file.write_all(txt.as_bytes())?;
+    file.write_all(txt.as_slice())?;
 
     let mut cmd = Command::new("ffmpeg");
-    cmd.args(&[
-        "-y",
-        "-safe",
-        "0",
-        "-f",
-        "concat",
-        "-i",
-        // cannot fail, conc_file has a valid UTF-8 filename
-        conc_file.to_str().unwrap(),
-        "-c",
-        "copy",
-        &out,
-    ]);
+    cmd.args(&["-y", "-safe", "0", "-f", "concat", "-i"]);
+    cmd.arg(conc_file);
+    cmd.args(&["-c", "copy"]);
+    cmd.arg(&pt);
 
     cmd.output()?;
 
@@ -237,8 +244,7 @@ fn optimize(file: &DirEntry, target_quality: f32, model: &Path) {
     let mut count: usize = 0;
     let mut score: f32 = 0.0;
     let path = file.path();
-    let stem = path.file_stem().unwrap().to_str().unwrap();
-    let file_str: &str = path.to_str().unwrap();
+    let stem: &OsStr = path.file_stem().unwrap_or_else(|| path.as_os_str());
     let mut bitrates: Vec<(u32, f32)> = vec![];
     // bitrate | score
 
@@ -248,7 +254,7 @@ fn optimize(file: &DirEntry, target_quality: f32, model: &Path) {
 
         if count > 8 {
             info!(
-                "# {} Exceed {} probes, Found B: {}, Score {:.2}",
+                "# {:?} Exceed {} probes, Found B: {}, Score {:.2}",
                 stem, count, bitrate, score
             );
             break;
@@ -264,8 +270,6 @@ fn optimize(file: &DirEntry, target_quality: f32, model: &Path) {
             break;
         }
 
-        // println!("# {} Probe: {} B: {}, Score: {:.2}", stem, count, bitrate, score);
-
         bitrate = ((target_quality / score) * (bitrate as f32)) as u32;
 
         if bitrate > 512000 {
@@ -274,19 +278,22 @@ fn optimize(file: &DirEntry, target_quality: f32, model: &Path) {
             bitrate = 500;
         }
     }
-    info!("# {} Found B: {}, Score {:.2}", stem, bitrate, score);
+    info!("# {:?} Found B: {}, Score {:.2}", stem, bitrate, score);
 
     let mut cmd = Command::new("ffmpeg");
-    cmd.args(&[
-        "-y",
-        "-i",
-        file_str,
-        "-c:a",
-        "libopus",
-        "-b:a",
-        &format!("{}", bitrate),
-        &format!("temp/conc/{}.opus", stem),
-    ]);
+    cmd.args(&["-y", "-i"]);
+    cmd.arg(&path);
+    cmd.args(&["-c:a", "libopus", "-b:a", &format!("{}", bitrate)]);
+    cmd.arg(
+        &[
+            OsStr::new("temp"),
+            OsStr::new("conc"),
+            Path::new(stem).with_extension("opus").as_os_str(),
+        ]
+        .iter()
+        .collect::<PathBuf>(),
+    );
+
     cmd.output().unwrap();
 }
 
@@ -326,45 +333,88 @@ fn transform_score(score: f32) -> f32 {
 }
 
 fn make_probe(file: &Path, bitrate: u32, model: &Path) -> f32 {
-    let file_str: &str = file.to_str().unwrap();
     // Audio to opus
-    let probe_name = file.file_stem().unwrap().to_str().unwrap();
+    let probe_name = file.file_stem().unwrap_or(file.as_os_str());
 
     let mut cmd = Command::new("ffmpeg");
-    cmd.args(&[
-        "-y",
-        "-i",
-        file_str,
-        "-c:a",
-        "libopus",
-        "-b:a",
-        &format!("{}", bitrate),
-        &format!("temp/probes/{}_{}.opus", probe_name, bitrate),
-    ]);
+    cmd.args(&["-y", "-i"]);
+    cmd.arg(file);
+    cmd.args(&["-c:a", "libopus", "-b:a", &format!("{}", bitrate)]);
+    cmd.arg(
+        &[
+            OsStr::new("temp"),
+            OsStr::new("probes"),
+            u8_slice_as_os_str(
+                vec![
+                    os_str_as_u8_slice(probe_name),
+                    b"_",
+                    bitrate.to_string().as_bytes(),
+                    b".opus",
+                ]
+                .into_iter()
+                .flatten()
+                .map(|byte| *byte)
+                .collect::<Vec<u8>>()
+                .as_ref(),
+            ),
+        ]
+        .iter()
+        .collect::<PathBuf>(),
+    );
     cmd.output().unwrap();
 
     // Audio to wav
     let mut cmd = Command::new("ffmpeg");
     cmd.args(&[
-        "-y",
-        "-i",
-        &format!("temp/probes/{}_{}.opus", probe_name, bitrate),
+        "-y", "-i",
+        // &format!("temp/probes/{}_{}.opus", probe_name, bitrate),
+    ]);
+    // cmd.arg(
+    //     &[
+    //         OsStr::new("temp"),
+    //         OsStr::new("probes"),
+    //         OsStr::new(
+    //             vec![
+    //                 os_str_to_byte_slice(probe_name),
+    //                 b"_",
+    //                 bitrate.to_string().as_bytes(),
+    //                 b".opus",
+    //             ]
+    //             .into_iter()
+    //             .flatten()
+    //             .collect::<Vec<&u8>>()
+    //             .as_ref(),
+    //         ),
+    //     ]
+    //     .iter()
+    //     .collect::<PathBuf>(),
+    // );
+    cmd.args(&[
         "-ar",
         "48000",
-        &format!("temp/probes/{}_{}.wav", probe_name, bitrate),
+        &format!(
+            "temp/probes/{}_{}.wav",
+            // FIX ME
+            probe_name.to_str().unwrap(),
+            bitrate
+        ),
     ]);
     cmd.output().expect("opus encoding failed");
 
     // calculating score
     let mut cmd = Command::new("visqol");
 
+    cmd.args(&["--similarity_to_quality_model"]);
+    cmd.arg(model);
     cmd.args(&[
-        "--similarity_to_quality_model",
-        model.to_str().unwrap(),
         "--reference_file",
-        file_str,
+        file.to_str().unwrap(),
         "--degraded_file",
-        &format!("temp/probes/{}_{}.wav", probe_name, bitrate),
+        &format!(
+            "temp/probes/{}_{}.wav",
+            probe_name.to_str().unwrap(),
+            bitrate
+        ),
     ]);
 
     cmd.stdout(Stdio::piped());
