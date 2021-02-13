@@ -20,8 +20,7 @@ Bopus search for bitrate of OPUS that will result in desired quality. Quality of
 -m, --model <model>              Model to use for visqol calculations. 
                                  If not specified, the default model is used
 -l, --log <log-level>            Log level 
-                                 (OFF, ERROR, WARN, INFO, DEBUG, TRACE) 
-                                 [default: INFO]
+                                 (OFF, ERROR, WARN, INFO, DEBUG, TRACE)[default: INFO]
 ```
 ## Support me
 Bitcoin - `1gU9aQ2qqoQPuvop2jqC68JKZh5cyCivG`
