@@ -9,8 +9,7 @@ Bopus search for bitrate of OPUS that will result in desired quality. Quality of
 
 ## Install
 1. Clone and install [Visqol](https://github.com/google/visqol).
-2. Clone and install bopus.
-
+2. Install Bopus
 
 ## Usage
 ```
