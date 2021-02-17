@@ -9,9 +9,7 @@ Bopus search for bitrate of OPUS that will result in desired quality. Quality of
 
 ## Install
 1. Clone and install [Visqol](https://github.com/google/visqol).
-2. Put models in same directory where is your audio file.
-3. Clone and build bopus, execute it in same folder with input file and `models` from visqol folder.
-
+2. Install Bopus
 
 ## Usage
 ```
@@ -21,8 +19,7 @@ Bopus search for bitrate of OPUS that will result in desired quality. Quality of
 -m, --model <model>              Model to use for visqol calculations. 
                                  If not specified, the default model is used
 -l, --log <log-level>            Log level 
-                                 (OFF, ERROR, WARN, INFO, DEBUG, TRACE) 
-                                 [default: INFO]
+                                 (OFF, ERROR, WARN, INFO, DEBUG, TRACE)[default: INFO]
 ```
 ## Support me
 Bitcoin - `1gU9aQ2qqoQPuvop2jqC68JKZh5cyCivG`
