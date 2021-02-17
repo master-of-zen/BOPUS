@@ -217,6 +217,7 @@ fn concatenate(output: &Path) -> Result<()> {
     let mut file = File::create(conc_file)?;
     file.write_all(txt.as_slice())?;
 
+    // FIXME fix concat get_audio_time
     let mut cmd = Command::new("ffmpeg");
     cmd.args(&["-y", "-safe", "0", "-f", "concat", "-i"]);
     cmd.arg(conc_file);
@@ -241,6 +242,7 @@ fn optimize(file: &DirEntry, target_quality: f32, model: &Path) -> Result<()> {
     // bitrate | score
 
     // Search loop
+    // FIXME: better search loop
     loop {
         count += 1;
 
