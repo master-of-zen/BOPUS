@@ -297,6 +297,18 @@ fn segment(input: &Path) -> Result<Vec<DirEntry>, std::io::Error> {
     // FIXME: Don't allow to segment be less that 5 sec
     let segments = Path::new("temp/segments");
     let mut cmd = Command::new("ffmpeg");
+    let duration = get_audio_time(input).as_secs_f64();
+
+    debug!("{:?}", duration);
+
+    // should help with too short cuts at the end
+    let mut chunk_time = duration % 10.0;
+    if chunk_time < 5.0 {
+        chunk_time = 15.0;
+    }
+
+    debug!("chunk time {}", chunk_time);
+
     cmd.args(&["-y", "-i"]);
     cmd.arg(input);
     cmd.args(&[
@@ -305,7 +317,7 @@ fn segment(input: &Path) -> Result<Vec<DirEntry>, std::io::Error> {
         "-f",
         "segment",
         "-segment_time",
-        "12",
+        &chunk_time.to_string(),
         "temp/segments/%05d.wav",
     ]);
 
