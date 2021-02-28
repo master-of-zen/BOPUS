@@ -266,10 +266,10 @@ fn optimize(file: &DirEntry, target_quality: f32, model: &Path) -> Result<()> {
 
         bitrate = ((target_quality / score) * (bitrate as f32)) as u32;
 
-        if bitrate > 512000 {
-            bitrate = 512000;
-        } else if bitrate < 500 {
-            bitrate = 500;
+        if bitrate > 320000 {
+            bitrate = 320000;
+        } else if bitrate < 16000 {
+            bitrate = 1600;
         }
     }
     info!("# {:?} Found B: {}, Score {:.2}", stem, bitrate, score);
