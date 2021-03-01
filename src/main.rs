@@ -229,6 +229,19 @@ fn concatenate(output: &Path) -> Result<()> {
     Ok(())
 }
 
+fn weighted_search(dt: &Vec<(u32, f32)>, target_quality: f32) {
+    let mut probes = dt.clone();
+    probes.sort_by(|a, b| {
+        (a.1 - target_quality)
+            .abs()
+            .partial_cmp(&(b.1 - target_quality).abs())
+            .unwrap()
+    });
+    let v1 = probes[0];
+    let v2 = probes[1];
+    debug!("{:#?} {:#?}", v1, v2)
+}
+
 fn optimize(file: &DirEntry, target_quality: f32, model: &Path) -> Result<()> {
     const TOLERANCE: f32 = 0.2;
 
@@ -265,7 +278,9 @@ fn optimize(file: &DirEntry, target_quality: f32, model: &Path) -> Result<()> {
         }
 
         bitrate = ((target_quality / score) * (bitrate as f32)) as u32;
-
+        if count > 3 {
+            weighted_search(&bitrates, target_quality);
+        }
         if bitrate > 320000 {
             bitrate = 320000;
         } else if bitrate < 16000 {
