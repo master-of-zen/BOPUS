@@ -13,7 +13,18 @@ pub fn transform_score(score: f32) -> f32 {
         (score - 4.1) * SCALE_VALUE
     }
 }
-
+pub fn weighted_search(dt: &Vec<(u32, f32)>, target_quality: f32) {
+    let mut probes = dt.clone();
+    probes.sort_by(|a, b| {
+        (a.1 - target_quality)
+            .abs()
+            .partial_cmp(&(b.1 - target_quality).abs())
+            .unwrap()
+    });
+    let v1 = probes[0];
+    let v2 = probes[1];
+    debug!("{:#?} {:#?}", v1, v2)
+}
 pub fn get_audio_time(input: &Path) -> Duration {
     const MILLIS_PER_MINUTE: u64 = 60_000;
     const MILLIS_PER_HOUR: u64 = MILLIS_PER_MINUTE * 60;
