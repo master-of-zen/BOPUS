@@ -1,10 +1,8 @@
 [package]
 name = "bopus"
-version = "0.1.0"
-authors = ["Zen <true.grenight@gmail.com>"]
+version = "0.3.0"
+authors = ["Zen <master_of_zen@protonmail.com>"]
 edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 structopt = "0.3.21"
