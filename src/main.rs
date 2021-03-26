@@ -274,7 +274,12 @@ fn optimize(file: &DirEntry, target_quality: f32, model: &Path) -> Result<()> {
             bitrate = 1600;
         }
     }
-    info!("# {:?} Found B: {}, Score {:.2}", stem, bitrate, score);
+    info!(
+        "# {:?} Found Bitrate: {:.1}, Score {:.2}",
+        stem,
+        bitrate / 1024,
+        score
+    );
 
     let mut cmd = Command::new("ffmpeg");
     cmd.args(&["-y", "-i"]);
