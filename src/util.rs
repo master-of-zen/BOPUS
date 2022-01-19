@@ -13,8 +13,8 @@ pub fn transform_score(score: f32) -> f32 {
         (score - 4.1) * SCALE_VALUE
     }
 }
-pub fn weighted_search(dt: &Vec<(u32, f32)>, target_quality: f32) {
-    let mut probes = dt.clone();
+pub fn weighted_search(dt: &[(u32, f32)], target_quality: f32) {
+    let mut probes = dt.to_owned();
     probes.sort_by(|a, b| {
         (a.1 - target_quality)
             .abs()

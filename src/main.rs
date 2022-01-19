@@ -137,7 +137,7 @@ fn main() -> Result<()> {
     info!("Running {} jobs", jobs);
 
     rayon::ThreadPoolBuilder::new()
-        .num_threads(jobs as usize)
+        .num_threads(jobs)
         .build_global()?;
 
     it.par_iter()
@@ -219,9 +219,9 @@ fn concatenate(output: &Path) -> Result<()> {
 
     // FIXME fix concat get_audio_time
     let mut cmd = Command::new("ffmpeg");
-    cmd.args(&["-y", "-safe", "0", "-f", "concat", "-i"]);
+    cmd.args(["-y", "-safe", "0", "-f", "concat", "-i"]);
     cmd.arg(conc_file);
-    cmd.args(&["-c", "copy"]);
+    cmd.args(["-c", "copy"]);
     cmd.arg(output);
 
     cmd.output()?;
@@ -237,7 +237,7 @@ fn optimize(file: &DirEntry, target_quality: f32, model: &Path) -> Result<()> {
     let mut count: usize = 0;
     let mut score: f32 = 0.0;
     let path = file.path();
-    let stem: &OsStr = path.file_stem().unwrap_or_else(|| path.as_os_str());
+    let stem: &OsStr = path.file_stem().unwrap_or(path.as_os_str());
     let mut bitrates: Vec<(u32, f32)> = vec![];
     // bitrate | score
 
@@ -282,9 +282,9 @@ fn optimize(file: &DirEntry, target_quality: f32, model: &Path) -> Result<()> {
     );
 
     let mut cmd = Command::new("ffmpeg");
-    cmd.args(&["-y", "-i"]);
+    cmd.args(["-y", "-i"]);
     cmd.arg(&path);
-    cmd.args(&["-c:a", "libopus", "-b:a", &format!("{}", bitrate)]);
+    cmd.args(["-c:a", "libopus", "-b:a", &format!("{}", bitrate)]);
     cmd.arg(
         &[
             OsStr::new("temp"),
@@ -316,9 +316,9 @@ fn segment(input: &Path) -> Result<Vec<DirEntry>, std::io::Error> {
 
     debug!("chunk time {}", chunk_time);
 
-    cmd.args(&["-y", "-i"]);
+    cmd.args(["-y", "-i"]);
     cmd.arg(input);
-    cmd.args(&[
+    cmd.args([
         "-ar",
         "48000",
         "-f",
@@ -330,7 +330,7 @@ fn segment(input: &Path) -> Result<Vec<DirEntry>, std::io::Error> {
 
     cmd.output()?;
 
-    fs::read_dir(&segments)?.collect()
+    fs::read_dir(segments)?.collect()
 }
 
 // lazily compile regex, avoid recompiling the same thing multiple times throughout the program
@@ -341,16 +341,16 @@ lazy_static! {
 fn make_probe(file: &Path, bitrate: u32, model: &Path) -> Result<f32> {
     let probe_name = file
         .file_stem()
-        .unwrap_or_else(|| file.as_os_str())
+        .unwrap_or(file.as_os_str())
         .to_str()
         // ffmpeg files should not be invalid UTF-8
         .ok_or(anyhow!("`probe_name` has a non UTF-8 filename"))?;
 
     // Audio to opus
     let mut cmd = Command::new("ffmpeg");
-    cmd.args(&["-y", "-i"]);
+    cmd.args(["-y", "-i"]);
     cmd.arg(file);
-    cmd.args(&[
+    cmd.args([
         "-c:a",
         "libopus",
         "-b:a",
@@ -361,9 +361,9 @@ fn make_probe(file: &Path, bitrate: u32, model: &Path) -> Result<f32> {
 
     // Audio to wav
     let mut cmd = Command::new("ffmpeg");
-    cmd.args(&["-y", "-i"]);
+    cmd.args(["-y", "-i"]);
     cmd.arg(&format!("temp/probes/{}_{}.opus", probe_name, bitrate));
-    cmd.args(&["-ar", "48000"]);
+    cmd.args(["-ar", "48000"]);
     cmd.arg(&format!("temp/probes/{}_{}.wav", probe_name, bitrate));
     cmd.output().expect("opus encoding failed");
 
@@ -374,7 +374,7 @@ fn make_probe(file: &Path, bitrate: u32, model: &Path) -> Result<f32> {
     cmd.arg(model);
     cmd.arg("--reference_file");
     cmd.arg(file);
-    cmd.args(&[
+    cmd.args([
         "--degraded_file",
         &format!("temp/probes/{}_{}.wav", probe_name, bitrate),
     ]);
@@ -394,3 +394,5 @@ fn make_probe(file: &Path, bitrate: u32, model: &Path) -> Result<f32> {
 
     Ok(score.parse::<f32>()?)
 }
+
+
